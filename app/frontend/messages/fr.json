@@ -1,0 +1,43 @@
+{
+  "nav": {
+    "brand": "Tessark",
+    "charts": "Charts",
+    "pull": "Télécharger image",
+    "lang": {
+      "switch": "Anglais"
+    }
+  },
+  "home": {
+    "title": "Explorateur de Charts Helm",
+    "placeholder": "https://charts.example.com ou https://helm.github.io/charts",
+    "search": "Rechercher",
+    "loading": "Chargement...",
+    "errorInvalidUrl": "Veuillez entrer une URL de repository Helm"
+  },
+  "charts": {
+    "availableIn": "Charts disponibles dans",
+    "countSuffix": "chart(s)",
+    "app": "App",
+    "more": "+ {n} version(s) supplémentaire(s)",
+    "less": "Réduire"
+  },
+  "download": "Télécharger",
+  "empty": {
+    "prompt": "Entrez l'URL d'un repository Helm pour commencer",
+    "example": "Exemple: https://charts.bitnami.com/bitnami"
+  },
+  "pull": {
+    "title": "Télécharger une image via skopeo",
+    "imageRef": "Référence d'image",
+    "format": "Format d'archive",
+    "formatDocker": "docker-archive (.tar)",
+    "formatOci": "oci-archive (.tar)",
+    "note": "Le serveur exécute skopeo copy et renvoie une archive tar à télécharger."
+  },
+  "footer": {
+    "made": "Made with",
+    "by": "by",
+    "copyright": "© {year} Tessark"
+  }
+}
+
