@@ -16,9 +16,36 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      helm: ${{ steps.filter.outputs.helm }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect file changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'app/backend/**'
+            frontend:
+              - 'app/frontend/**'
+            helm:
+              - 'charts/tessark/**'
+
   build-backend:
     name: Build Backend Image
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -66,6 +93,8 @@ jobs:
   build-frontend:
     name: Build Frontend Image
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -113,6 +142,8 @@ jobs:
   package-helm-chart:
     name: Package and Push Helm Chart
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.helm == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
@@ -138,6 +169,11 @@ jobs:
           echo "version=${CHART_VERSION}" >> $GITHUB_OUTPUT
           echo "Chart version: ${CHART_VERSION}"
 
+      - name: Prepare repository owner in lowercase
+        id: repo_owner
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Package Helm chart
         run: |
           helm package charts/tessark --destination .
@@ -145,7 +181,7 @@ jobs:
       - name: Push Helm chart to OCI registry
         if: github.event_name != 'pull_request'
         run: |
-          helm push tessark-${{ steps.chart_version.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/helm-charts
+          helm push tessark-${{ steps.chart_version.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ steps.repo_owner.outputs.owner }}
 
       - name: Upload Helm chart as artifact
         uses: actions/upload-artifact@v4
