@@ -32,7 +32,13 @@
     "format": "Format d'archive",
     "formatDocker": "docker-archive (.tar)",
     "formatOci": "oci-archive (.tar)",
-    "note": "Le serveur exécute skopeo copy et renvoie une archive tar à télécharger."
+    "note": "Le serveur exécute skopeo copy et renvoie une archive tar à télécharger.",
+    "auth": {
+      "toggle": "Authentification (optionnel)",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "note": "Pour les registres privés. Les identifiants sont transmis directement à skopeo."
+    }
   },
   "footer": {
     "made": "Made with",

@@ -99,6 +99,10 @@ struct PullParams {
     r#ref: String,
     #[serde(default = "default_format")]
     format: String,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 fn default_format() -> String {
@@ -170,7 +174,17 @@ async fn pull_image(
     };
 
     let mut cmd = Command::new(&state.skopeo_path);
-    cmd.arg("copy").arg(format!("docker://{}", params.r#ref)).arg(dest);
+    cmd.arg("copy");
+
+    // Add authentication if credentials are provided
+    if let (Some(username), Some(password)) = (&params.username, &params.password) {
+        if !username.trim().is_empty() && !password.trim().is_empty() {
+            let creds = format!("{}:{}", username.trim(), password.trim());
+            cmd.arg("--src-creds").arg(creds);
+        }
+    }
+
+    cmd.arg(format!("docker://{}", params.r#ref)).arg(dest);
 
     let result = timeout(Duration::from_secs(300), cmd.output()).await;
     let output = match result {

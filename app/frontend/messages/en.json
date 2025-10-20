@@ -32,7 +32,13 @@
     "format": "Archive format",
     "formatDocker": "docker-archive (.tar)",
     "formatOci": "oci-archive (.tar)",
-    "note": "The server runs skopeo copy and returns a tar archive to download."
+    "note": "The server runs skopeo copy and returns a tar archive to download.",
+    "auth": {
+      "toggle": "Authentication (optional)",
+      "username": "Username",
+      "password": "Password",
+      "note": "For private registries. Credentials are passed directly to skopeo."
+    }
   },
   "footer": {
     "made": "Made with",

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, Package, ExternalLink } from 'lucide-react';
+import { Download, Package, ExternalLink, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
 import { usePathname } from 'next/navigation';
 
@@ -13,6 +13,9 @@ export default function PullClientPage() {
   const [ref, setRef] = useState('docker.io/library/nginx:latest');
   const [format, setFormat] = useState<'docker-archive' | 'oci-archive'>('docker-archive');
   const [error, setError] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +24,13 @@ export default function PullClientPage() {
       return;
     }
     setError('');
-    const url = `/api/pull?ref=${encodeURIComponent(ref.trim())}&format=${encodeURIComponent(format)}`;
+    let url = `/api/pull?ref=${encodeURIComponent(ref.trim())}&format=${encodeURIComponent(format)}`;
+
+    // Add authentication parameters if provided
+    if (username.trim() && password.trim()) {
+      url += `&username=${encodeURIComponent(username.trim())}&password=${encodeURIComponent(password.trim())}`;
+    }
+
     window.location.href = url;
   };
 
@@ -124,6 +133,45 @@ export default function PullClientPage() {
                 <option value="oci-archive">{t('pull.formatOci')}</option>
               </select>
             </div>
+
+            <div className="border-t pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAuth(!showAuth)}
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition"
+              >
+                <Lock className="w-4 h-4" />
+                {t('pull.auth.toggle')}
+                {showAuth ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {showAuth && (
+                <div className="mt-4 space-y-3 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.auth.username')}</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="username"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.auth.password')}</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">{t('pull.auth.note')}</p>
+                </div>
+              )}
+            </div>
+
             {error && <div className="text-sm text-red-600">{error}</div>}
             <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition inline-flex items-center gap-2">
               <Download className="w-4 h-4" />

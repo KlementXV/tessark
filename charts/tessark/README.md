@@ -1,5 +1,6 @@
 # Tessark Helm Chart
 
+
 This Helm chart deploys the Tessark application (Next.js frontend + Rust backend) on Kubernetes.
 
 ## Prerequisites

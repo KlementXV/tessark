@@ -47,6 +47,7 @@ Tessark is a production-ready, cloud-native application that combines the perfor
 - 🔄 **Multi-arch Support**: Ready for linux/amd64 (arm64 available)
 - 🌐 **Ingress Support**: Traefik and Nginx ingress configurations included
 - 📊 **Resource Optimized**: Fine-tuned resource requests and limits
+- 🔐 **Private Registry Support**: Authentication for pulling images from private registries
 
 ### Container Images
 
@@ -267,6 +268,35 @@ backend:
     RUST_LOG: "info"
     SKOPEO_PATH: "/usr/bin/skopeo"
 ```
+
+### Private Registry Authentication
+
+The application supports authentication for pulling images from private registries:
+
+1. **Via Web Interface**:
+   - Navigate to the "Pull Image" page
+   - Click on "Authentication (optional)"
+   - Enter your registry username and password
+   - Credentials are securely passed to skopeo for authentication
+
+2. **Supported Registries**:
+   - Docker Hub (private repositories)
+   - GitHub Container Registry (ghcr.io)
+   - GitLab Container Registry
+   - Harbor
+   - Any registry supporting Docker Registry HTTP API V2
+
+3. **API Usage**:
+   ```bash
+   curl -G "http://localhost:8080/api/pull" \
+     --data-urlencode "ref=ghcr.io/private/myimage:latest" \
+     --data-urlencode "username=myuser" \
+     --data-urlencode "password=mytoken" \
+     --data-urlencode "format=docker-archive" \
+     --output myimage.tar
+   ```
+
+**Security Note**: Credentials are transmitted via HTTPS when using a proper ingress with TLS. They are passed directly to skopeo and never stored on the server.
 
 ### Frontend Configuration
 
