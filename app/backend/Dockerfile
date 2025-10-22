@@ -4,7 +4,7 @@ ARG APP_NAME=helmer-api
 
 FROM rust:${RUST_VERSION}-bookworm AS chef
 WORKDIR /app
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef --version 0.1.62
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
