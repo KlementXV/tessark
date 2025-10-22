@@ -2,21 +2,19 @@
 ARG RUST_VERSION=1.83
 ARG APP_NAME=helmer-api
 
-FROM rust:${RUST_VERSION}-bookworm AS chef
-WORKDIR /app
-RUN cargo install cargo-chef --version 0.1.62
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
 FROM rust:${RUST_VERSION}-bookworm AS builder
 WORKDIR /app
-RUN cargo install cargo-chef
-COPY --from=chef /app/recipe.json recipe.json
 
-# Build des dépendances (caché si Cargo.* inchangés)
-RUN cargo chef cook --release --recipe-path recipe.json
+# Copy manifests first for better caching
+COPY Cargo.toml Cargo.lock ./
 
-# Build de l'application
+# Build dependencies only (cache this layer)
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# Copy source code and build application
 COPY . .
 ENV CARGO_TERM_COLOR=never
 RUN cargo build --release --bin helmer-api && \
