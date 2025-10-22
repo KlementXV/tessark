@@ -1,16 +1,16 @@
 # syntax=docker/dockerfile:1.7
-ARG RUST_VERSION=1.82
+ARG RUST_VERSION=1.83
 ARG APP_NAME=helmer-api
 
 FROM rust:${RUST_VERSION}-bookworm AS chef
 WORKDIR /app
-RUN cargo install cargo-chef --version 0.1.67
+RUN cargo install cargo-chef
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM rust:${RUST_VERSION}-bookworm AS builder
 WORKDIR /app
-RUN cargo install cargo-chef --version 0.1.67
+RUN cargo install cargo-chef
 COPY --from=chef /app/recipe.json recipe.json
 
 # Build des dépendances (caché si Cargo.* inchangés)
