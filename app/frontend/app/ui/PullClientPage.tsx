@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, Package, ExternalLink, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Package, ExternalLink, Lock, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
 import { usePathname } from 'next/navigation';
 
@@ -10,28 +10,113 @@ const IMAGE_RE = /^[A-Za-z0-9./:@_\-]+$/;
 export default function PullClientPage() {
   const { t, locale } = useI18n();
   const pathname = usePathname();
-  const [ref, setRef] = useState('docker.io/library/nginx:latest');
+  const [refs, setRefs] = useState<string[]>(['docker.io/library/nginx:latest']);
   const [format, setFormat] = useState<'docker-archive' | 'oci-archive'>('docker-archive');
   const [error, setError] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showAuth, setShowAuth] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const addImage = () => {
+    setRefs([...refs, '']);
+  };
+
+  const removeImage = (index: number) => {
+    if (refs.length > 1) {
+      setRefs(refs.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateImage = (index: number, value: string) => {
+    const newRefs = [...refs];
+    newRefs[index] = value;
+    setRefs(newRefs);
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ref.trim() || !IMAGE_RE.test(ref)) {
-      setError('Référence invalide. Caractères autorisés: lettres, chiffres, ./:@_-');
+
+    // Filter out empty references
+    const validRefs = refs.filter(r => r.trim() !== '');
+
+    if (validRefs.length === 0) {
+      setError('Au moins une référence d\'image est requise');
       return;
     }
-    setError('');
-    let url = `/api/pull?ref=${encodeURIComponent(ref.trim())}&format=${encodeURIComponent(format)}`;
 
-    // Add authentication parameters if provided
-    if (username.trim() && password.trim()) {
-      url += `&username=${encodeURIComponent(username.trim())}&password=${encodeURIComponent(password.trim())}`;
+    // Validate all references
+    for (const ref of validRefs) {
+      if (!IMAGE_RE.test(ref.trim())) {
+        setError(`Référence invalide: ${ref}. Caractères autorisés: lettres, chiffres, ./:@_-`);
+        return;
+      }
     }
 
-    window.location.href = url;
+    // Check if multiple images - not supported with current formats
+    if (validRefs.length > 1) {
+      setError('Le téléchargement de plusieurs images dans un seul fichier .tar n\'est pas supporté. Veuillez télécharger les images une par une.');
+      return;
+    }
+
+    setError('');
+
+    // Build request body with refs parameter for multiple images
+    const refsParam = validRefs.map(r => r.trim()).join(',');
+    const requestBody: any = {
+      refs: refsParam,
+      format: format,
+    };
+
+    // Add authentication securely in POST body if provided
+    if (username.trim() && password.trim()) {
+      requestBody.username = username.trim();
+      requestBody.password = password.trim();
+    }
+
+    setLoading(true);
+    try {
+      // Use POST with JSON body for secure credentials transmission
+      const response = await fetch('/api/pull', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        setError(`Erreur: ${errorText || response.statusText}`);
+        return;
+      }
+
+      // Download the file from the response
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'images.tar';
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(`Erreur réseau: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const otherLocale = locale === 'fr' ? 'en' : 'fr';
@@ -112,15 +197,44 @@ export default function PullClientPage() {
           <h1 className="text-2xl font-bold text-gray-800 mb-4">{t('pull.title')}</h1>
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.imageRef')}</label>
-              <input
-                type="text"
-                value={ref}
-                onChange={(e) => setRef(e.target.value)}
-                placeholder="docker.io/library/nginx:latest"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700">{t('pull.imageRef')}</label>
+                <button
+                  type="button"
+                  onClick={addImage}
+                  className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Ajouter une image
+                </button>
+              </div>
+              <div className="space-y-2">
+                {refs.map((ref, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={ref}
+                      onChange={(e) => updateImage(index, e.target.value)}
+                      placeholder="docker.io/library/nginx:latest"
+                      className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                    />
+                    {refs.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        className="px-3 py-3 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                        aria-label="Supprimer cette image"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
               <p className="text-xs text-gray-500 mt-1">Exemples: docker.io/library/nginx:latest • ghcr.io/org/app:1.2.3</p>
+              {refs.length > 1 && (
+                <p className="text-xs text-orange-600 mt-1">⚠️ Note: Le téléchargement de plusieurs images dans un seul .tar n'est pas supporté. Utilisez une seule image à la fois.</p>
+              )}
             </div>
             <div>
               <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.format')}</label>
@@ -173,9 +287,13 @@ export default function PullClientPage() {
             </div>
 
             {error && <div className="text-sm text-red-600">{error}</div>}
-            <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition inline-flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Download className="w-4 h-4" />
-              {t('download')}
+              {loading ? 'Téléchargement...' : t('download')}
             </button>
           </form>
         </div>

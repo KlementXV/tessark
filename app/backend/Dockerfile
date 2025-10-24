@@ -12,7 +12,7 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
-    rm -rf src
+    rm -rf src target/release/helmer-api* target/release/.fingerprint/helmer-api-*
 
 # Copy source code and build application
 COPY . .

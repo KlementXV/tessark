@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::Query,
+    extract::{Query, Json},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
     routing::get,
@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/api/fetchIndex", get(fetch_index))
-        .route("/api/pull", get(pull_image))
+        .route("/api/pull", get(pull_image).post(pull_image_post))
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .with_state(state);
@@ -96,9 +96,29 @@ async fn fetch_index(
 
 #[derive(Deserialize)]
 struct PullParams {
-    r#ref: String,
+    // Accept either "ref" (single) or "refs" (multiple, comma-separated)
+    #[serde(default)]
+    r#ref: Option<String>,
+    #[serde(default)]
+    refs: Option<String>,
     #[serde(default = "default_format")]
     format: String,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PullRequestBody {
+    // Accept either "ref" (single) or "refs" (multiple, comma-separated)
+    #[serde(default)]
+    r#ref: Option<String>,
+    #[serde(default)]
+    refs: Option<String>,
+    #[serde(default = "default_format")]
+    format: String,
+    // Credentials in POST body (secure)
     #[serde(default)]
     username: Option<String>,
     #[serde(default)]
@@ -147,81 +167,213 @@ fn parse_repo_tag(reference: &str) -> (String, String) {
     }
 }
 
+// GET endpoint (backwards compatible, credentials in query params - less secure)
 async fn pull_image(
     axum::extract::State(state): axum::extract::State<AppState>,
     Query(params): Query<PullParams>,
 ) -> impl IntoResponse {
-    if params.r#ref.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, "Missing ref").into_response();
-    }
-    if !valid_ref(&params.r#ref) {
-        return (StatusCode::BAD_REQUEST, "Invalid ref").into_response();
+    do_pull_image(
+        state,
+        params.r#ref,
+        params.refs,
+        params.format,
+        params.username,
+        params.password,
+    )
+    .await
+}
+
+// POST endpoint with secure credentials in body
+async fn pull_image_post(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(body): Json<PullRequestBody>,
+) -> impl IntoResponse {
+    do_pull_image(
+        state,
+        body.r#ref,
+        body.refs,
+        body.format,
+        body.username,
+        body.password,
+    )
+    .await
+}
+
+// Common implementation for both GET and POST
+async fn do_pull_image(
+    state: AppState,
+    r#ref: Option<String>,
+    refs: Option<String>,
+    format: String,
+    username: Option<String>,
+    password: Option<String>,
+) -> axum::response::Response {
+    // Parse image references - accept either single ref or multiple refs
+    let references: Vec<String> = if let Some(refs_param) = &refs {
+        // Multiple images, comma-separated
+        refs_param
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else if let Some(ref_param) = &r#ref {
+        // Single image (backwards compatibility)
+        if ref_param.trim().is_empty() {
+            return (StatusCode::BAD_REQUEST, "Missing ref").into_response();
+        }
+        vec![ref_param.trim().to_string()]
+    } else {
+        return (StatusCode::BAD_REQUEST, "Missing ref or refs parameter").into_response();
+    };
+
+    if references.is_empty() {
+        return (StatusCode::BAD_REQUEST, "No images specified").into_response();
     }
 
-    let fmt = match params.format.as_str() {
-        "docker-archive" | "oci-archive" => params.format.clone(),
+    // Validate all references
+    for reference in &references {
+        if !valid_ref(reference) {
+            return (StatusCode::BAD_REQUEST, format!("Invalid ref: {}", reference)).into_response();
+        }
+    }
+
+    let fmt = match format.as_str() {
+        "docker-archive" | "oci-archive" => format.clone(),
         _ => "docker-archive".to_string(),
     };
 
     let uid = Uuid::new_v4().to_string();
-    let tmp: PathBuf = std::env::temp_dir().join(format!("image-{}.tar", uid));
 
-    let (repo, tag) = parse_repo_tag(&params.r#ref);
-    let dest = if fmt == "docker-archive" {
-        format!("{}:{}:{}:{}", fmt, tmp.display(), repo, tag)
-    } else {
-        format!("{}:{}", fmt, tmp.display())
-    };
-
-    let mut cmd = Command::new(&state.skopeo_path);
-    cmd.arg("copy");
-
-    // Add authentication if credentials are provided
-    if let (Some(username), Some(password)) = (&params.username, &params.password) {
-        if !username.trim().is_empty() && !password.trim().is_empty() {
-            let creds = format!("{}:{}", username.trim(), password.trim());
-            cmd.arg("--src-creds").arg(creds);
-        }
+    // For multiple images with docker-archive format, we need to handle differently
+    // OCI archive doesn't support multiple images well, so we'll error if multiple with OCI
+    if references.len() > 1 && fmt == "oci-archive" {
+        return (StatusCode::BAD_REQUEST, "OCI archive format doesn't support multiple images in a single tar").into_response();
     }
 
-    cmd.arg(format!("docker://{}", params.r#ref)).arg(dest);
+    // For multiple images with docker-archive format, download each separately
+    // then use skopeo to create a proper multi-image tar
+    // NOTE: docker-archive format doesn't truly support multiple images in one tar
+    // So we return an error for now and suggest using separate downloads
+    if references.len() > 1 {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Multi-image download in a single tar is not supported with docker-archive format. Please download images individually or use a container runtime like Docker to save multiple images."
+        ).into_response();
+    }
 
-    let result = timeout(Duration::from_secs(300), cmd.output()).await;
-    let output = match result {
-        Err(_) => return (StatusCode::GATEWAY_TIMEOUT, "Timeout while copying image").into_response(),
-        Ok(Err(e)) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                return (StatusCode::NOT_IMPLEMENTED, "skopeo not found (ENOENT)").into_response();
+    // Single image download
+    let tmp_tars: Vec<PathBuf> = {
+        // Single image: use the old direct approach
+        let tmp_tar = std::env::temp_dir().join(format!("images-{}.tar", uid));
+        let reference = &references[0];
+        let (repo, tag) = parse_repo_tag(reference);
+        let dest = format!("{}:{}:{}:{}", fmt, tmp_tar.display(), repo, tag);
+
+        let mut cmd = Command::new(&state.skopeo_path);
+        cmd.arg("copy");
+
+        // Add authentication if credentials are provided
+        if let (Some(username), Some(password)) = (&username, &password) {
+            if !username.trim().is_empty() && !password.trim().is_empty() {
+                let creds = format!("{}:{}", username.trim(), password.trim());
+                cmd.arg("--src-creds").arg(creds);
+            }
+        }
+
+        cmd.arg(format!("docker://{}", reference)).arg(&dest);
+
+        let result = timeout(Duration::from_secs(300), cmd.output()).await;
+        let output = match result {
+            Err(_) => {
+                let _ = fs::remove_file(&tmp_tar).await;
+                return (StatusCode::GATEWAY_TIMEOUT, format!("Timeout while copying image: {}", reference)).into_response();
+            }
+            Ok(Err(e)) => {
+                let _ = fs::remove_file(&tmp_tar).await;
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return (StatusCode::NOT_IMPLEMENTED, "skopeo not found (ENOENT)").into_response();
+                }
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    format!("Failed to spawn skopeo: {}", e),
+                )
+                    .into_response();
+            }
+            Ok(Ok(out)) => out,
+        };
+
+        if !output.status.success() {
+            let _ = fs::remove_file(&tmp_tar).await;
+            let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
+            if stderr.contains("manifest unknown")
+                || stderr.contains("not found")
+                || stderr.contains("name unknown")
+            {
+                return (StatusCode::NOT_FOUND, format!("Image not found: {}", reference)).into_response();
+            }
+            if stderr.contains("denied")
+                || stderr.contains("unauthorized")
+                || stderr.contains("authentication required")
+            {
+                return (StatusCode::FORBIDDEN, format!("Access denied to registry for: {}", reference)).into_response();
             }
             return (
                 StatusCode::BAD_GATEWAY,
-                format!("Failed to spawn skopeo: {}", e),
+                format!("skopeo error for {}: {}", reference, String::from_utf8_lossy(&output.stderr)),
             )
                 .into_response();
         }
-        Ok(Ok(out)) => out,
+
+        vec![tmp_tar]
     };
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
-        if stderr.contains("manifest unknown")
-            || stderr.contains("not found")
-            || stderr.contains("name unknown")
-        {
-            return (StatusCode::NOT_FOUND, "Image not found").into_response();
+    // If multiple images, combine all tar files into one
+    let tmp: PathBuf = if tmp_tars.len() > 1 {
+        let combined_tar = std::env::temp_dir().join(format!("images-combined-{}.tar", uid));
+
+        // Use tar command to combine all tar files
+        let mut tar_cmd = Command::new("tar");
+        tar_cmd.arg("--concatenate").arg("-f").arg(&combined_tar);
+        for tar_file in &tmp_tars {
+            tar_cmd.arg(tar_file);
         }
-        if stderr.contains("denied")
-            || stderr.contains("unauthorized")
-            || stderr.contains("authentication required")
-        {
-            return (StatusCode::FORBIDDEN, "Access denied to registry").into_response();
+
+        let tar_result = tar_cmd.output().await;
+        match tar_result {
+            Ok(output) if output.status.success() => {
+                // Clean up individual tar files
+                for tar_file in &tmp_tars {
+                    let _ = fs::remove_file(tar_file).await;
+                }
+                combined_tar
+            }
+            Ok(output) => {
+                // Clean up all files on error
+                for tar_file in &tmp_tars {
+                    let _ = fs::remove_file(tar_file).await;
+                }
+                let _ = fs::remove_file(&combined_tar).await;
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to combine tar files: {}", String::from_utf8_lossy(&output.stderr)),
+                )
+                    .into_response();
+            }
+            Err(e) => {
+                // Clean up all files on error
+                for tar_file in &tmp_tars {
+                    let _ = fs::remove_file(tar_file).await;
+                }
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to run tar command: {}", e),
+                )
+                    .into_response();
+            }
         }
-        return (
-            StatusCode::BAD_GATEWAY,
-            format!("skopeo error: {}", String::from_utf8_lossy(&output.stderr)),
-        )
-            .into_response();
-    }
+    } else {
+        tmp_tars.into_iter().next().unwrap()
+    };
 
     // Get file size for Content-Length header
     let file_size = match fs::metadata(&tmp).await {
@@ -260,7 +412,14 @@ async fn pull_image(
         let _ = fs::remove_file(&tmp_clone).await;
     });
 
-    let filename = format!("{}-{}-{}.tar", repo, tag, fmt);
+    // Generate filename
+    let filename = if references.len() == 1 {
+        let (repo, tag) = parse_repo_tag(&references[0]);
+        format!("{}-{}-{}.tar", repo, tag, fmt)
+    } else {
+        format!("images-{}-{}.tar", references.len(), fmt)
+    };
+
     let mut headers = HeaderMap::new();
     headers.insert(
         axum::http::header::CONTENT_TYPE,
