@@ -28,14 +28,15 @@
     "example": "Exemple: https://charts.bitnami.com/bitnami"
   },
   "pull": {
-    "title": "Télécharger une image via skopeo",
-    "imageRef": "Référence d'image",
+    "title": "Télécharger des images via skopeo",
+    "imageRef": "Références d'images",
     "format": "Format d'archive",
     "formatDocker": "docker-archive (.tar)",
     "formatOci": "oci-archive (.tar)",
-    "note": "Le serveur exécute skopeo copy et renvoie une archive tar à télécharger.",
+    "note": "Le serveur exécute skopeo copy et renvoie une archive tar à télécharger pour chaque image. Les téléchargements se font en succession.",
     "examples": "Exemples: docker.io/library/nginx:latest • ghcr.io/org/app:1.2.3",
-    "errorMissingRef": "Une référence d'image est requise",
+    "multipleImages": "Entrez une image par ligne. Les téléchargements se feront en succession (streaming).",
+    "errorMissingRef": "Au moins une référence d'image est requise",
     "errorInvalidRef": "Référence invalide. Caractères autorisés: lettres, chiffres, ./:@_-",
     "auth": {
       "toggle": "Authentification (optionnel)",
