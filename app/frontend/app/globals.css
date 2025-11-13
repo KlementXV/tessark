@@ -65,4 +65,78 @@
     @apply border-b-4 border-excalidraw-slate;
     background-color: #ffffff;
   }
+
+  /* Collapsible section styling */
+  .collapsible-section {
+    @apply border-t-2 border-excalidraw-slate pt-4;
+  }
+
+  .collapsible-toggle {
+    @apply flex items-center gap-2 text-sm font-medium text-excalidraw-slate hover:opacity-70 transition cursor-pointer;
+  }
+
+  .collapsible-content {
+    @apply mt-4 space-y-3 p-4 rounded border-2 border-excalidraw-slate;
+    background-color: #fafafa;
+  }
+
+  /* Accent sections with colors */
+  .accent-section-blue {
+    background-color: #e0efff;
+    border-color: #6bb6ff;
+  }
+
+  .accent-section-green {
+    background-color: #e1ffd1;
+    border-color: #86efac;
+  }
+
+  .accent-section-rose {
+    background-color: #ffe4f0;
+    border-color: #ff8fa3;
+  }
+
+  .accent-section-violet {
+    background-color: #f0e4ff;
+    border-color: #c084fc;
+  }
+
+  .accent-section-yellow {
+    background-color: #fffde7;
+    border-color: #ffea58;
+  }
+
+  .accent-section-orange {
+    background-color: #ffe5c0;
+    border-color: #ff9500;
+  }
+
+  /* Accent button styling */
+  .accent-button {
+    @apply sketchy-button transition-all duration-200;
+  }
+
+  .accent-button-blue {
+    background-color: #e0efff;
+    border-color: #6bb6ff;
+    color: #1e40af;
+  }
+
+  .accent-button-green {
+    background-color: #e1ffd1;
+    border-color: #86efac;
+    color: #166534;
+  }
+
+  .accent-button-violet {
+    background-color: #f0e4ff;
+    border-color: #c084fc;
+    color: #6b21a8;
+  }
+
+  .accent-button-orange {
+    background-color: #ffe5c0;
+    border-color: #ff9500;
+    color: #92400e;
+  }
 }
