@@ -108,14 +108,14 @@ export default function HelmChartBrowser() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+    <div className="min-h-screen excalidraw-bg flex flex-col">
       <Navigation />
 
       <div className="flex-1 max-w-6xl mx-auto p-6 w-full">
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
+        <div className="excalidraw-card p-8 mb-6">
           <div className="flex items-center gap-3 mb-6">
-            <Search className="w-8 h-8 text-indigo-600" />
-            <h1 className="text-3xl font-bold text-gray-800">{t('home.title')}</h1>
+            <Search className="w-8 h-8 text-excalidraw-slate" />
+            <h1 className="text-3xl font-bold text-excalidraw-slate">{t('home.title')}</h1>
           </div>
 
           <div className="flex gap-3 mb-4">
@@ -126,13 +126,13 @@ export default function HelmChartBrowser() {
                 onChange={(e) => setRepoUrl(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && fetchCharts()}
                 placeholder={t('home.placeholder')}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                className="sketchy-input w-full"
               />
             </div>
             <button
               onClick={fetchCharts}
               disabled={loading}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center gap-2 font-medium"
+              className="sketchy-button bg-white text-excalidraw-slate disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -149,7 +149,7 @@ export default function HelmChartBrowser() {
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-red-600 bg-red-50 p-4 rounded-lg">
+            <div className="flex items-center gap-2 text-red-600 bg-red-50 p-4 rounded border-2 border-red-300">
               <AlertCircle className="w-5 h-5" />
               <span>{error}</span>
             </div>
@@ -157,10 +157,10 @@ export default function HelmChartBrowser() {
         </div>
 
         {charts.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+          <div className="excalidraw-card p-8">
+            <h2 className="text-2xl font-bold text-excalidraw-slate mb-6">
               {t('charts.availableIn')} {extractRepoName(base)}
-              <span className="ml-3 text-sm font-normal text-gray-500">
+              <span className="ml-3 text-sm font-normal text-excalidraw-slate opacity-70">
                 ({charts.length} {t('charts.countSuffix')})
               </span>
             </h2>
@@ -176,25 +176,25 @@ export default function HelmChartBrowser() {
                 const isOpen = expanded.has(name);
                 const visibleVersions = isOpen ? versions : versions.slice(0, 3);
                 return (
-                  <div key={name} className="border-2 border-gray-200 rounded-lg p-5 hover:border-indigo-300 transition">
-                    <h3 className="text-xl font-bold text-gray-800 mb-3">{name}</h3>
+                  <div key={name} className="border-2 border-excalidraw-slate rounded p-5 hover:shadow-sketchy-lg transition">
+                    <h3 className="text-xl font-bold text-excalidraw-slate mb-3">{name}</h3>
                     <div className="space-y-2">
                       {visibleVersions.map((v, idx) => (
-                        <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                        <div key={idx} className="flex items-center justify-between bg-excalidraw-slate-light p-3 rounded">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
-                              <span className="font-semibold text-indigo-600">v{v.version}</span>
+                              <span className="font-semibold text-excalidraw-slate">v{v.version}</span>
                               {v.appVersion && (
-                                <span className="text-sm text-gray-600">{t('charts.app')}: {String(v.appVersion)}</span>
+                                <span className="text-sm text-excalidraw-slate opacity-75">{t('charts.app')}: {String(v.appVersion)}</span>
                               )}
                             </div>
                             {v.description && (
-                              <p className="text-sm text-gray-600">{v.description}</p>
+                              <p className="text-sm text-excalidraw-slate opacity-75">{v.description}</p>
                             )}
                           </div>
                           <button
                             onClick={() => downloadChart(name, v)}
-                            className="ml-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 whitespace-nowrap"
+                            className="sketchy-button ml-4 bg-white text-excalidraw-slate hover:opacity-80 flex items-center gap-2 whitespace-nowrap"
                           >
                             <Download className="w-4 h-4" />
                             {t('download')}
@@ -207,7 +207,7 @@ export default function HelmChartBrowser() {
                         <button
                           type="button"
                           onClick={() => toggleExpanded(name)}
-                          className="text-sm font-medium text-indigo-600 hover:underline"
+                          className="text-sm font-medium text-excalidraw-slate border-b border-excalidraw-slate hover:opacity-70"
                           aria-expanded={isOpen}
                           aria-controls={`versions-${name}`}
                         >
@@ -223,10 +223,10 @@ export default function HelmChartBrowser() {
         )}
 
         {!loading && charts.length === 0 && !error && (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-            <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 text-lg">{t('empty.prompt')}</p>
-            <p className="text-gray-400 text-sm mt-2">{t('empty.example')}</p>
+          <div className="excalidraw-card p-12 text-center">
+            <Package className="w-16 h-16 text-excalidraw-slate opacity-30 mx-auto mb-4" />
+            <p className="text-excalidraw-slate text-lg">{t('empty.prompt')}</p>
+            <p className="text-excalidraw-slate text-sm mt-2 opacity-70">{t('empty.example')}</p>
           </div>
         )}
       </div>
