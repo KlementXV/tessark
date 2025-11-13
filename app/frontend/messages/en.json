@@ -12,7 +12,8 @@
     "placeholder": "https://charts.example.com or https://helm.github.io/charts",
     "search": "Search",
     "loading": "Loading...",
-    "errorInvalidUrl": "Please enter a Helm repository URL"
+    "errorInvalidUrl": "Please enter a Helm repository URL",
+    "errorFetchFailed": "Error fetching charts. Please check the repository URL."
   },
   "charts": {
     "availableIn": "Charts available in",
@@ -33,6 +34,9 @@
     "formatDocker": "docker-archive (.tar)",
     "formatOci": "oci-archive (.tar)",
     "note": "The server runs skopeo copy and returns a tar archive to download.",
+    "examples": "Examples: docker.io/library/nginx:latest • ghcr.io/org/app:1.2.3",
+    "errorMissingRef": "An image reference is required",
+    "errorInvalidRef": "Invalid reference. Allowed characters: letters, digits, ./:@_-",
     "auth": {
       "toggle": "Authentication (optional)",
       "username": "Username",

@@ -8,9 +8,10 @@ use axum::{
 };
 use regex::Regex;
 use serde::Deserialize;
-use std::{env, path::PathBuf, time::Duration};
+use std::{env, time::Duration};
 use tokio::{fs, process::Command, time::timeout};
 use tokio_util::io::ReaderStream;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -21,13 +22,21 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    eprintln!("Starting helmer-api...");
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into()),
+        )
+        .init();
+
+    info!("Starting tessark backend service");
     let skopeo_path = env::var("SKOPEO_PATH").unwrap_or_else(|_| "skopeo".to_string());
-    eprintln!("Skopeo path: {}", skopeo_path);
+    info!("Skopeo path: {}", skopeo_path);
     let client = reqwest::Client::builder()
-        .user_agent("helmer-api/0.1")
+        .user_agent("tessark-backend/0.1")
         .build()?;
-    eprintln!("HTTP client created");
+    info!("HTTP client created");
 
     let state = AppState { skopeo_path, client };
 
@@ -38,14 +47,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/ready", get(readiness_check))
         .with_state(state);
 
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".into()).parse::<u16>()?;
-    eprintln!("Parsed port: {}", port);
+    let port = env::var("PORT")
+        .unwrap_or_else(|_| "8080".into())
+        .parse::<u16>()?;
+    info!("Parsed port: {}", port);
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-    eprintln!("Binding to {}", addr);
+    info!("Binding to {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    eprintln!("listening on http://{}", addr);
+    info!("Server listening on http://{}", addr);
     axum::serve(listener, app).await?;
-    eprintln!("Server stopped");
+    info!("Server stopped");
     Ok(())
 }
 
@@ -58,14 +69,21 @@ async fn fetch_index(
     axum::extract::State(state): axum::extract::State<AppState>,
     Query(params): Query<FetchIndexParams>,
 ) -> impl IntoResponse {
+    debug!("Fetching index from: {}", params.url);
+
     // Validate URL: only http/https
     let Ok(mut url) = url::Url::parse(&params.url) else {
-        return (StatusCode::BAD_REQUEST, "Invalid URL").into_response();
+        warn!("Invalid URL format: {}", params.url);
+        return (StatusCode::BAD_REQUEST, "Invalid URL format").into_response();
     };
     match url.scheme() {
         "http" | "https" => {}
-        _ => return (StatusCode::BAD_REQUEST, "Invalid scheme").into_response(),
+        _ => {
+            warn!("Invalid URL scheme: {}", url.scheme());
+            return (StatusCode::BAD_REQUEST, "Invalid URL scheme").into_response();
+        }
     }
+
     // Normalize to index.yaml if not present
     let path = url.path().to_string();
     if !path.ends_with("/index.yaml") && !path.ends_with("/index.yml") {
@@ -74,24 +92,48 @@ async fn fetch_index(
         url.set_path(&p);
     }
 
-    let res = state.client.get(url.clone()).send().await;
+    debug!("Final index URL: {}", url);
+
+    // Fetch with timeout
+    let fetch_future = state.client.get(url.clone()).send();
+    let res = match timeout(Duration::from_secs(30), fetch_future).await {
+        Ok(result) => result,
+        Err(_) => {
+            error!("Timeout fetching index from: {}", url);
+            return (StatusCode::GATEWAY_TIMEOUT, "Upstream request timeout")
+                .into_response();
+        }
+    };
+
     let Ok(resp) = res else {
+        error!("Failed to fetch index from: {}", url);
         return (StatusCode::BAD_GATEWAY, "Upstream fetch failed").into_response();
     };
+
     if !resp.status().is_success() {
+        warn!("Upstream error: {} from {}", resp.status(), url);
         return (
             StatusCode::BAD_GATEWAY,
             format!("Upstream error: {}", resp.status()),
         )
             .into_response();
     }
-    let text = resp.text().await.unwrap_or_default();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        axum::http::header::CONTENT_TYPE,
-        HeaderValue::from_static("text/plain; charset=utf-8"),
-    );
-    (StatusCode::OK, headers, text).into_response()
+
+    match resp.text().await {
+        Ok(text) => {
+            debug!("Successfully fetched index ({} bytes)", text.len());
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=utf-8"),
+            );
+            (StatusCode::OK, headers, text).into_response()
+        }
+        Err(e) => {
+            error!("Failed to read response body: {}", e);
+            (StatusCode::BAD_GATEWAY, "Failed to read upstream response").into_response()
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -196,24 +238,33 @@ async fn do_pull_image(
     username: Option<String>,
     password: Option<String>,
 ) -> axum::response::Response {
+    debug!("Pull request: ref={}, format={}", reference, format);
+
     // Validate reference
     if reference.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, "Missing ref").into_response();
+        warn!("Empty image reference");
+        return (StatusCode::BAD_REQUEST, "Missing image reference").into_response();
     }
 
     if !valid_ref(&reference) {
-        return (StatusCode::BAD_REQUEST, "Invalid ref").into_response();
+        warn!("Invalid reference format: {}", reference);
+        return (StatusCode::BAD_REQUEST, "Invalid image reference format").into_response();
     }
 
     let fmt = match format.as_str() {
         "docker-archive" | "oci-archive" => format.clone(),
-        _ => "docker-archive".to_string(),
+        _ => {
+            debug!("Unknown format {}, defaulting to docker-archive", format);
+            "docker-archive".to_string()
+        }
     };
 
     let uid = Uuid::new_v4().to_string();
     let tmp_tar = std::env::temp_dir().join(format!("images-{}.tar", uid));
     let (repo, tag) = parse_repo_tag(&reference);
     let dest = format!("{}:{}:{}:{}", fmt, tmp_tar.display(), repo, tag);
+
+    debug!("Temp file: {}", tmp_tar.display());
 
     let mut cmd = Command::new(&state.skopeo_path);
     cmd.arg("copy");
@@ -223,75 +274,78 @@ async fn do_pull_image(
         if !username.trim().is_empty() && !password.trim().is_empty() {
             let creds = format!("{}:{}", username.trim(), password.trim());
             cmd.arg("--src-creds").arg(creds);
+            debug!("Authentication credentials provided");
         }
     }
 
     cmd.arg(format!("docker://{}", reference)).arg(&dest);
 
+    debug!("Executing skopeo copy for: {}", reference);
     let result = timeout(Duration::from_secs(300), cmd.output()).await;
     let output = match result {
         Err(_) => {
+            error!("Timeout copying image: {}", reference);
             let _ = fs::remove_file(&tmp_tar).await;
-            return (StatusCode::GATEWAY_TIMEOUT, format!("Timeout while copying image: {}", reference)).into_response();
+            return (StatusCode::GATEWAY_TIMEOUT, "Image pull timeout (exceeded 5 minutes)")
+                .into_response();
         }
         Ok(Err(e)) => {
+            error!("Failed to spawn skopeo: {}", e);
             let _ = fs::remove_file(&tmp_tar).await;
             if e.kind() == std::io::ErrorKind::NotFound {
-                return (StatusCode::NOT_IMPLEMENTED, "skopeo not found (ENOENT)").into_response();
+                return (StatusCode::NOT_IMPLEMENTED, "skopeo command not found").into_response();
             }
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("Failed to spawn skopeo: {}", e),
-            )
+            return (StatusCode::BAD_GATEWAY, format!("Failed to spawn skopeo: {}", e))
                 .into_response();
         }
         Ok(Ok(out)) => out,
     };
 
     if !output.status.success() {
+        error!("skopeo copy failed for: {}", reference);
         let _ = fs::remove_file(&tmp_tar).await;
         let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
+
         if stderr.contains("manifest unknown")
             || stderr.contains("not found")
             || stderr.contains("name unknown")
         {
-            return (StatusCode::NOT_FOUND, format!("Image not found: {}", reference)).into_response();
+            warn!("Image not found: {}", reference);
+            return (StatusCode::NOT_FOUND, format!("Image not found: {}", reference))
+                .into_response();
         }
         if stderr.contains("denied")
             || stderr.contains("unauthorized")
             || stderr.contains("authentication required")
         {
-            return (StatusCode::FORBIDDEN, format!("Access denied to registry for: {}", reference)).into_response();
+            warn!("Access denied for: {}", reference);
+            return (StatusCode::FORBIDDEN, "Access denied to registry").into_response();
         }
-        return (
-            StatusCode::BAD_GATEWAY,
-            format!("skopeo error for {}: {}", reference, String::from_utf8_lossy(&output.stderr)),
-        )
-            .into_response();
+
+        error!("skopeo stderr: {}", stderr);
+        return (StatusCode::BAD_GATEWAY, "Failed to copy image").into_response();
     }
 
     // Get file size for Content-Length header
     let file_size = match fs::metadata(&tmp_tar).await {
         Ok(meta) => meta.len(),
         Err(e) => {
+            error!("Failed to get file metadata: {}", e);
             let _ = fs::remove_file(&tmp_tar).await;
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get file metadata: {}", e),
-            )
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to prepare download")
                 .into_response();
         }
     };
+
+    debug!("Archive size: {} bytes", file_size);
 
     // Open file for streaming
     let file = match fs::File::open(&tmp_tar).await {
         Ok(f) => f,
         Err(e) => {
+            error!("Failed to open archive: {}", e);
             let _ = fs::remove_file(&tmp_tar).await;
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to open archive: {}", e),
-            )
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open archive")
                 .into_response();
         }
     };
@@ -300,11 +354,21 @@ async fn do_pull_image(
     let stream = ReaderStream::new(file);
     let body = Body::from_stream(stream);
 
-    // Schedule file deletion after a delay to allow streaming to complete
+    // Schedule file deletion after streaming completes (with retry)
     let tmp_clone = tmp_tar.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let _ = fs::remove_file(&tmp_clone).await;
+        // Wait a bit for streaming to complete, then attempt deletion
+        for retry in 0..3 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            if fs::remove_file(&tmp_clone).await.is_ok() {
+                debug!("Temporary file cleaned up");
+                return;
+            }
+            if retry < 2 {
+                debug!("Retry cleaning temp file (attempt {})", retry + 1);
+            }
+        }
+        warn!("Failed to clean up temporary file: {}", tmp_clone.display());
     });
 
     // Generate filename
@@ -315,34 +379,40 @@ async fn do_pull_image(
         axum::http::header::CONTENT_TYPE,
         HeaderValue::from_static("application/x-tar"),
     );
+    if let Ok(val) = HeaderValue::from_str(&file_size.to_string()) {
+        headers.insert(axum::http::header::CONTENT_LENGTH, val);
+    }
+    if let Ok(val) = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)) {
+        headers.insert(axum::http::header::CONTENT_DISPOSITION, val);
+    }
     headers.insert(
-        axum::http::header::CONTENT_LENGTH,
-        HeaderValue::from_str(&file_size.to_string()).unwrap_or(HeaderValue::from_static("0")),
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store"),
     );
-    headers.insert(
-        axum::http::header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)).unwrap_or(HeaderValue::from_static("attachment")),
-    );
-    headers.insert(axum::http::header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
 
+    info!("Serving image: {} ({} bytes)", reference, file_size);
     (StatusCode::OK, headers, body).into_response()
 }
 
 async fn health_check() -> impl IntoResponse {
+    debug!("Health check");
     (StatusCode::OK, "OK")
 }
 
 async fn readiness_check(
     axum::extract::State(state): axum::extract::State<AppState>,
 ) -> impl IntoResponse {
+    debug!("Readiness check");
     let mut cmd = Command::new(&state.skopeo_path);
     cmd.arg("--version");
-    
+
     match timeout(Duration::from_secs(5), cmd.output()).await {
         Ok(Ok(output)) if output.status.success() => {
+            info!("Readiness check passed");
             (StatusCode::OK, "Ready")
-        },
+        }
         _ => {
+            warn!("Readiness check failed: skopeo not available");
             (StatusCode::SERVICE_UNAVAILABLE, "skopeo not available")
         }
     }

@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import yaml from 'js-yaml';
-import { Search, Download, Package, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Search, Download, AlertCircle, Loader2, Package } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
-import { usePathname } from 'next/navigation';
+import Navigation from './Navigation';
+import Footer from './Footer';
 
 type ChartVersion = {
   version?: string;
@@ -40,8 +41,7 @@ function resolveUrl(resourceUrl: string, base?: string) {
 }
 
 export default function HelmChartBrowser() {
-  const { t, locale } = useI18n();
-  const pathname = usePathname();
+  const { t } = useI18n();
   const [repoUrl, setRepoUrl] = useState('');
   const [indexData, setIndexData] = useState<IndexYaml | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +70,7 @@ export default function HelmChartBrowser() {
       setIndexData(parsed ?? {});
     } catch (err) {
       console.error(err);
-      setError("Erreur lors de la récupération des charts. Vérifiez l'URL du repository.");
+      setError(t('home.errorFetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -107,78 +107,9 @@ export default function HelmChartBrowser() {
     });
   };
 
-  const otherLocale = locale === 'fr' ? 'en' : 'fr';
-  const altPath = (() => {
-    if (!pathname) return `/${otherLocale}/`;
-    const parts = pathname.split('/');
-    parts[1] = otherLocale;
-    return parts.join('/') || `/${otherLocale}/`;
-  })();
-
-  const isPull = pathname?.startsWith(`/${locale}/pull`) ?? false;
-  const isCharts = !isPull;
-
-  const frPath = (() => {
-    if (!pathname) return '/fr/';
-    const parts = pathname.split('/');
-    parts[1] = 'fr';
-    return parts.join('/') || '/fr/';
-  })();
-  const enPath = (() => {
-    if (!pathname) return '/en/';
-    const parts = pathname.split('/');
-    parts[1] = 'en';
-    return parts.join('/') || '/en/';
-  })();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
-      <nav className="bg-white shadow-lg border-b-4 border-indigo-600">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Package className="w-8 h-8 text-indigo-600" />
-              <span className="text-2xl font-bold text-gray-800">{t('nav.brand')}</span>
-            </div>
-            <div className="flex items-center gap-6">
-              <a
-                href={`/${locale}/`}
-                className={`text-gray-700 hover:text-indigo-600 transition font-medium ${isCharts ? 'text-indigo-700 font-semibold border-b-2 border-indigo-600' : ''}`}
-                aria-current={isCharts ? 'page' : undefined}
-              >
-                {t('nav.charts')}
-              </a>
-              <a
-                href={`/${locale}/pull`}
-                className={`text-gray-700 hover:text-indigo-600 transition font-medium ${isPull ? 'text-indigo-700 font-semibold border-b-2 border-indigo-600' : ''}`}
-                aria-current={isPull ? 'page' : undefined}
-              >
-                {t('nav.pull')}
-              </a>
-              <div className="flex items-center gap-2 ml-2">
-                <a
-                  href={frPath}
-                  aria-label="Français"
-                  aria-current={locale === 'fr' ? 'true' : undefined}
-                  className={`text-xl leading-none ${locale === 'fr' ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
-                  title="Français"
-                >
-                  🇫🇷
-                </a>
-                <a
-                  href={enPath}
-                  aria-label="English"
-                  aria-current={locale === 'en' ? 'true' : undefined}
-                  className={`text-xl leading-none ${locale === 'en' ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
-                  title="English"
-                >
-                  🇬🇧
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navigation />
 
       <div className="flex-1 max-w-6xl mx-auto p-6 w-full">
         <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
@@ -300,29 +231,7 @@ export default function HelmChartBrowser() {
         )}
       </div>
 
-      <footer className="mt-auto">
-        <div className="h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-        <div className="backdrop-blur supports-[backdrop-filter]:bg-white/60 bg-white/80">
-          <div className="max-w-6xl mx-auto px-6 py-6 text-center text-sm text-gray-700">
-            <div className="text-gray-500">{t('footer.copyright', { year: new Date().getFullYear() })}</div>
-            <div>
-              <span className="text-gray-700">{t('footer.made')}</span>
-              <span className="mx-1 text-pink-600 animate-pulse" aria-hidden="true">♥️</span>
-              <span className="text-gray-700">{t('footer.by')}</span>
-              {' '}
-              <a
-                href="https://github.com/KlementXV"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
-              >
-                KlementXV
-                <ExternalLink className="w-4 h-4" aria-hidden="true" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
