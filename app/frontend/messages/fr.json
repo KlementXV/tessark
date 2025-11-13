@@ -3,6 +3,7 @@
     "brand": "Tessark",
     "charts": "Charts",
     "pull": "Télécharger image",
+    "oci": "Télécharger Chart OCI",
     "lang": {
       "switch": "Anglais"
     }
@@ -44,6 +45,26 @@
       "password": "Mot de passe",
       "note": "Pour les registres privés. Les identifiants sont transmis directement à skopeo."
     }
+  },
+  "oci": {
+    "title": "Télécharger un Chart OCI",
+    "description": "Téléchargez les charts Helm stockés comme artefacts OCI dans les registres de conteneurs.",
+    "chartRef": "Référence du Chart",
+    "chartRefHelp": "Exemple: ghcr.io/prometheus-community/charts/kube-prometheus-stack",
+    "version": "Version",
+    "optional": "Optionnel",
+    "versionHelp": "Si non spécifiée, la dernière version sera téléchargée",
+    "authentication": "Authentification",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "pull": "Télécharger le Chart",
+    "pulling": "Téléchargement en cours...",
+    "errorInvalidRef": "Veuillez entrer une référence de chart",
+    "howItWorks": "Comment ça marche",
+    "help1": "1. Entrez la référence OCI complète de votre chart (ex: ghcr.io/prometheus-community/charts/kube-prometheus-stack)",
+    "help2": "2. Spécifiez optionnellement une version ou laissez vide pour la plus récente",
+    "help3": "3. Si le registre demande une authentification, fournissez vos identifiants",
+    "help4": "4. Cliquez sur \"Télécharger le Chart\" pour télécharger le chart en tant que fichier .tgz"
   },
   "footer": {
     "made": "Made with",
