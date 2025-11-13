@@ -141,43 +141,43 @@ export default function PullClientPage() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+    <div className="min-h-screen excalidraw-bg flex flex-col">
       <Navigation />
 
       <div className="flex-1 max-w-3xl w-full mx-auto p-6">
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">{t('pull.title')}</h1>
+        <div className="excalidraw-card p-8">
+          <h1 className="text-2xl font-bold text-excalidraw-slate mb-4">{t('pull.title')}</h1>
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="block mb-2 text-sm font-medium text-gray-700">
+              <label className="block mb-2 text-sm font-medium text-excalidraw-slate">
                 {t('pull.imageRef')} ({imageCount} image{imageCount > 1 ? 's' : ''})
               </label>
               <textarea
                 value={refs}
                 onChange={(e) => setRefs(e.target.value)}
                 placeholder="docker.io/library/nginx:latest&#10;docker.io/library/alpine:latest&#10;ghcr.io/org/app:1.2.3"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition font-mono text-sm"
+                className="sketchy-input w-full font-excalidraw text-sm"
                 rows={6}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('pull.multipleImages')}</p>
+              <p className="text-xs text-excalidraw-slate opacity-70 mt-1">{t('pull.multipleImages')}</p>
             </div>
             <div>
-              <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.format')}</label>
+              <label className="block mb-2 text-sm font-medium text-excalidraw-slate">{t('pull.format')}</label>
               <select
                 value={format}
                 onChange={(e) => setFormat(e.target.value as any)}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition bg-white"
+                className="sketchy-input w-full bg-white"
               >
                 <option value="docker-archive">{t('pull.formatDocker')}</option>
                 <option value="oci-archive">{t('pull.formatOci')}</option>
               </select>
             </div>
 
-            <div className="border-t pt-4">
+            <div className="border-t-2 border-excalidraw-slate pt-4">
               <button
                 type="button"
                 onClick={() => setShowAuth(!showAuth)}
-                className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-indigo-600 transition"
+                className="flex items-center gap-2 text-sm font-medium text-excalidraw-slate hover:opacity-70 transition"
               >
                 <Lock className="w-4 h-4" />
                 {t('pull.auth.toggle')}
@@ -185,28 +185,28 @@ export default function PullClientPage() {
               </button>
 
               {showAuth && (
-                <div className="mt-4 space-y-3 bg-gray-50 p-4 rounded-lg">
+                <div className="mt-4 space-y-3 bg-excalidraw-slate-light p-4 rounded border-2 border-excalidraw-slate">
                   <div>
-                    <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.auth.username')}</label>
+                    <label className="block mb-2 text-sm font-medium text-excalidraw-slate">{t('pull.auth.username')}</label>
                     <input
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="username"
-                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                      className="sketchy-input w-full"
                     />
                   </div>
                   <div>
-                    <label className="block mb-2 text-sm font-medium text-gray-700">{t('pull.auth.password')}</label>
+                    <label className="block mb-2 text-sm font-medium text-excalidraw-slate">{t('pull.auth.password')}</label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                      className="sketchy-input w-full"
                     />
                   </div>
-                  <p className="text-xs text-gray-500">{t('pull.auth.note')}</p>
+                  <p className="text-xs text-excalidraw-slate opacity-70">{t('pull.auth.note')}</p>
                 </div>
               )}
             </div>
@@ -214,28 +214,28 @@ export default function PullClientPage() {
             {error && <div className="text-sm text-red-600">{error}</div>}
 
             {loading && progress.total > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="bg-white border-2 border-excalidraw-slate rounded p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-blue-800">
+                  <span className="text-sm font-medium text-excalidraw-slate">
                     Progression: {progress.current}/{progress.total}
                   </span>
-                  <span className="text-sm font-semibold text-indigo-600">
+                  <span className="text-sm font-semibold text-excalidraw-slate">
                     {Math.round((progress.current / progress.total) * 100)}%
                   </span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2">
+                <div className="w-full bg-excalidraw-slate-light rounded h-2">
                   <div
-                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-excalidraw-slate h-2 rounded transition-all duration-300"
                     style={{ width: `${(progress.current / progress.total) * 100}%` }}
                   />
                 </div>
                 {currentImage && (
-                  <p className="text-sm text-blue-700 font-mono break-all">{currentImage}</p>
+                  <p className="text-sm text-excalidraw-slate font-mono break-all opacity-75">{currentImage}</p>
                 )}
               </div>
             )}
 
-            {error && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+            {error && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded border-2 border-red-300">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>}
@@ -243,14 +243,14 @@ export default function PullClientPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="sketchy-button w-full bg-white text-excalidraw-slate disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
               {loading ? `Téléchargement ${progress.current}/${progress.total}...` : t('download')}
             </button>
           </form>
         </div>
-        <div className="text-xs text-gray-500 mt-4">{t('pull.note')}</div>
+        <div className="text-xs text-excalidraw-slate opacity-70 mt-4">{t('pull.note')}</div>
       </div>
 
       <Footer />

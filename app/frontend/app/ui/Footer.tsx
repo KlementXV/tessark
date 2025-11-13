@@ -8,24 +8,24 @@ export default function Footer() {
 
   return (
     <footer className="mt-auto">
-      <div className="h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-      <div className="backdrop-blur supports-[backdrop-filter]:bg-white/60 bg-white/80">
-        <div className="max-w-6xl mx-auto px-6 py-6 text-center text-sm text-gray-700">
-          <div className="text-gray-500">
+      <div className="h-2 border-t-2 border-excalidraw-slate" />
+      <div className="bg-white">
+        <div className="max-w-6xl mx-auto px-6 py-6 text-center text-sm text-excalidraw-slate">
+          <div className="text-excalidraw-slate opacity-75">
             {t('footer.copyright', { year: new Date().getFullYear() })}
           </div>
           <div>
-            <span className="text-gray-700">{t('footer.made')}</span>
-            <span className="mx-1 text-pink-600 animate-pulse" aria-hidden="true">
+            <span className="text-excalidraw-slate">{t('footer.made')}</span>
+            <span className="mx-1 animate-pulse" aria-hidden="true">
               ♥️
             </span>
-            <span className="text-gray-700">{t('footer.by')}</span>
+            <span className="text-excalidraw-slate">{t('footer.by')}</span>
             {' '}
             <a
               href="https://github.com/KlementXV"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+              className="inline-flex items-center gap-1 font-semibold text-excalidraw-slate border-b-2 border-excalidraw-slate hover:opacity-70 transition"
             >
               KlementXV
               <ExternalLink className="w-4 h-4" aria-hidden="true" />

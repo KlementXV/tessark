@@ -26,18 +26,18 @@ export default function Navigation() {
   })();
 
   return (
-    <nav className="bg-white shadow-lg border-b-4 border-indigo-600">
+    <nav className="excalidraw-header shadow-sketchy">
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Package className="w-8 h-8 text-indigo-600" />
-            <span className="text-2xl font-bold text-gray-800">{t('nav.brand')}</span>
+            <Package className="w-8 h-8 text-excalidraw-slate" />
+            <span className="text-2xl font-bold text-excalidraw-slate" style={{ fontFamily: 'Cascadia Code, monospace' }}>{t('nav.brand')}</span>
           </div>
           <div className="flex items-center gap-6">
             <a
               href={`/${locale}/`}
-              className={`text-gray-700 hover:text-indigo-600 transition font-medium ${
-                isCharts ? 'text-indigo-700 font-semibold border-b-2 border-indigo-600' : ''
+              className={`text-excalidraw-slate hover:opacity-70 transition font-medium ${
+                isCharts ? 'font-bold border-b-2 border-excalidraw-slate' : 'opacity-75'
               }`}
               aria-current={isCharts ? 'page' : undefined}
             >
@@ -45,8 +45,8 @@ export default function Navigation() {
             </a>
             <a
               href={`/${locale}/pull`}
-              className={`text-gray-700 hover:text-indigo-600 transition font-medium ${
-                isPull ? 'text-indigo-700 font-semibold border-b-2 border-indigo-600' : ''
+              className={`text-excalidraw-slate hover:opacity-70 transition font-medium ${
+                isPull ? 'font-bold border-b-2 border-excalidraw-slate' : 'opacity-75'
               }`}
               aria-current={isPull ? 'page' : undefined}
             >
