@@ -94,3 +94,128 @@ export async function GET(req: NextRequest) {
     httpReq.end();
   });
 }
+
+export async function POST(req: NextRequest) {
+  let body: any;
+  try {
+    body = await req.json();
+  } catch (e) {
+    return new Response('Invalid JSON body', { status: 400 });
+  }
+
+  const ref = (body.ref || '').trim();
+  const formatRaw = (body.format || 'docker-archive').trim();
+  const format = formatRaw === 'oci-archive' ? 'oci-archive' : 'docker-archive';
+  const username = (body.username || '').trim();
+  const password = (body.password || '').trim();
+
+  if (!ref) {
+    return new Response('Missing image reference', { status: 400 });
+  }
+  if (!IMAGE_RE.test(ref)) {
+    return new Response('Invalid image reference format', { status: 400 });
+  }
+
+  // Build request body for backend
+  const backendRequestBody: any = {
+    ref,
+    format,
+  };
+
+  if (username && password) {
+    backendRequestBody.username = username;
+    backendRequestBody.password = password;
+  }
+
+  const backendUrl = `${BACKEND_URL}/api/pull`;
+
+  return new Promise<Response>((resolve) => {
+    const parsedUrl = new URL(backendUrl);
+    const bodyString = JSON.stringify(backendRequestBody);
+
+    const httpReq = http.request(
+      {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || 80,
+        path: parsedUrl.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyString),
+          'Accept': 'application/x-tar',
+        },
+        timeout: 5 * 60 * 1000, // 5 minutes
+      },
+      (httpRes) => {
+        if (httpRes.statusCode !== 200) {
+          let errorBody = '';
+          httpRes.on('data', (chunk) => {
+            errorBody += chunk;
+          });
+          httpRes.on('end', () => {
+            resolve(
+              new Response(errorBody || `Backend error: ${httpRes.statusCode}`, {
+                status: httpRes.statusCode || 502,
+              })
+            );
+          });
+          return;
+        }
+
+        // Create a ReadableStream from the Node.js stream
+        const stream = new ReadableStream({
+          start(controller) {
+            httpRes.on('data', (chunk) => {
+              controller.enqueue(new Uint8Array(chunk));
+            });
+            httpRes.on('end', () => {
+              controller.close();
+            });
+            httpRes.on('error', (err) => {
+              controller.error(err);
+            });
+          },
+          cancel() {
+            httpRes.destroy();
+          },
+        });
+
+        // Forward headers from backend
+        const headers = new Headers();
+        const contentType = httpRes.headers['content-type'];
+        if (contentType) headers.set('content-type', contentType);
+
+        const contentLength = httpRes.headers['content-length'];
+        if (contentLength) headers.set('content-length', contentLength);
+
+        const contentDisposition = httpRes.headers['content-disposition'];
+        if (contentDisposition) headers.set('content-disposition', contentDisposition);
+
+        headers.set('cache-control', 'no-store');
+
+        resolve(
+          new Response(stream, {
+            status: 200,
+            headers,
+          })
+        );
+      }
+    );
+
+    httpReq.on('error', (err) => {
+      resolve(
+        new Response(`Backend communication error: ${err.message}`, {
+          status: 502,
+        })
+      );
+    });
+
+    httpReq.on('timeout', () => {
+      httpReq.destroy();
+      resolve(new Response('Image pull timeout (exceeded 5 minutes)', { status: 504 }));
+    });
+
+    httpReq.write(bodyString);
+    httpReq.end();
+  });
+}
