@@ -9,7 +9,8 @@ export default function Navigation() {
   const pathname = usePathname();
 
   const isPull = pathname?.startsWith(`/${locale}/pull`) ?? false;
-  const isCharts = !isPull;
+  const isOci = pathname?.startsWith(`/${locale}/oci`) ?? false;
+  const isCharts = !isPull && !isOci;
 
   const frPath = (() => {
     if (!pathname) return '/fr/';
@@ -51,6 +52,15 @@ export default function Navigation() {
               aria-current={isPull ? 'page' : undefined}
             >
               {t('nav.pull')}
+            </a>
+            <a
+              href={`/${locale}/oci`}
+              className={`text-excalidraw-slate hover:opacity-70 transition font-medium ${
+                isOci ? 'font-bold border-b-2 border-excalidraw-slate' : 'opacity-75'
+              }`}
+              aria-current={isOci ? 'page' : undefined}
+            >
+              {t('nav.oci')}
             </a>
             <div className="flex items-center gap-2 ml-2">
               <a

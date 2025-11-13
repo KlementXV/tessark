@@ -17,6 +17,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 struct AppState {
     skopeo_path: String,
+    helm_path: String,
     client: reqwest::Client,
 }
 
@@ -33,16 +34,19 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting tessark backend service");
     let skopeo_path = env::var("SKOPEO_PATH").unwrap_or_else(|_| "skopeo".to_string());
     info!("Skopeo path: {}", skopeo_path);
+    let helm_path = env::var("HELM_PATH").unwrap_or_else(|_| "helm".to_string());
+    info!("Helm path: {}", helm_path);
     let client = reqwest::Client::builder()
         .user_agent("tessark-backend/0.1")
         .build()?;
     info!("HTTP client created");
 
-    let state = AppState { skopeo_path, client };
+    let state = AppState { skopeo_path, helm_path, client };
 
     let app = Router::new()
         .route("/api/fetchIndex", get(fetch_index))
         .route("/api/pull", get(pull_image).post(pull_image_post))
+        .route("/api/pullChart", get(pull_chart).post(pull_chart_post))
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .with_state(state);
@@ -160,6 +164,28 @@ struct PullRequestBody {
 
 fn default_format() -> String {
     "docker-archive".to_string()
+}
+
+#[derive(Deserialize)]
+struct PullChartParams {
+    r#ref: String,
+    #[serde(default)]
+    version: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PullChartRequestBody {
+    r#ref: String,
+    #[serde(default)]
+    version: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 fn valid_ref(s: &str) -> bool {
@@ -394,6 +420,229 @@ async fn do_pull_image(
     (StatusCode::OK, headers, body).into_response()
 }
 
+// GET endpoint for pulling charts (backwards compatible)
+async fn pull_chart(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Query(params): Query<PullChartParams>,
+) -> impl IntoResponse {
+    do_pull_chart(
+        state,
+        params.r#ref,
+        params.version,
+        params.username,
+        params.password,
+    )
+    .await
+}
+
+// POST endpoint for pulling charts with secure credentials
+async fn pull_chart_post(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(body): Json<PullChartRequestBody>,
+) -> impl IntoResponse {
+    do_pull_chart(
+        state,
+        body.r#ref,
+        body.version,
+        body.username,
+        body.password,
+    )
+    .await
+}
+
+// Common implementation for both GET and POST
+async fn do_pull_chart(
+    state: AppState,
+    reference: String,
+    version: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+) -> axum::response::Response {
+    debug!("Pull chart request: ref={}, version={:?}", reference, version);
+
+    // Validate reference (OCI format: ghcr.io/namespace/chart-name)
+    if reference.trim().is_empty() {
+        warn!("Empty chart reference");
+        return (StatusCode::BAD_REQUEST, "Missing chart reference").into_response();
+    }
+
+    if !valid_ref(&reference) {
+        warn!("Invalid reference format: {}", reference);
+        return (StatusCode::BAD_REQUEST, "Invalid chart reference format").into_response();
+    }
+
+    let uid = Uuid::new_v4().to_string();
+    let temp_dir = std::env::temp_dir().join(format!("charts-{}", uid));
+
+    // Create temporary directory
+    if let Err(e) = fs::create_dir_all(&temp_dir).await {
+        error!("Failed to create temp directory: {}", e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create temp directory").into_response();
+    }
+
+    // Build helm pull command
+    let mut cmd = Command::new(&state.helm_path);
+    cmd.arg("pull");
+
+    // Add authentication if provided
+    if let (Some(username), Some(password)) = (&username, &password) {
+        if !username.trim().is_empty() && !password.trim().is_empty() {
+            cmd.arg("--username").arg(username.trim());
+            cmd.arg("--password").arg(password.trim());
+            debug!("Authentication credentials provided for chart pull");
+        }
+    }
+
+    // Add version if specified
+    if let Some(ver) = &version {
+        if !ver.trim().is_empty() {
+            cmd.arg("--version").arg(ver.trim());
+        }
+    }
+
+    // Set output directory
+    cmd.arg("--destination").arg(&temp_dir);
+
+    // Add the OCI reference with oci:// prefix
+    cmd.arg(format!("oci://{}", reference));
+
+    debug!("Executing helm pull for: {}", reference);
+    let result = timeout(Duration::from_secs(300), cmd.output()).await;
+    let output = match result {
+        Err(_) => {
+            error!("Timeout pulling chart: {}", reference);
+            let _ = fs::remove_dir_all(&temp_dir).await;
+            return (StatusCode::GATEWAY_TIMEOUT, "Chart pull timeout (exceeded 5 minutes)")
+                .into_response();
+        }
+        Ok(Err(e)) => {
+            error!("Failed to spawn helm: {}", e);
+            let _ = fs::remove_dir_all(&temp_dir).await;
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return (StatusCode::NOT_IMPLEMENTED, "helm command not found").into_response();
+            }
+            return (StatusCode::BAD_GATEWAY, format!("Failed to spawn helm: {}", e))
+                .into_response();
+        }
+        Ok(Ok(out)) => out,
+    };
+
+    if !output.status.success() {
+        error!("helm pull failed for: {}", reference);
+        let _ = fs::remove_dir_all(&temp_dir).await;
+        let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
+
+        if stderr.contains("not found") || stderr.contains("chart") {
+            warn!("Chart not found: {}", reference);
+            return (StatusCode::NOT_FOUND, format!("Chart not found: {}", reference))
+                .into_response();
+        }
+        if stderr.contains("denied") || stderr.contains("unauthorized") {
+            warn!("Access denied for: {}", reference);
+            return (StatusCode::FORBIDDEN, "Access denied to registry").into_response();
+        }
+
+        error!("helm stderr: {}", stderr);
+        return (StatusCode::BAD_GATEWAY, "Failed to pull chart").into_response();
+    }
+
+    // Find the .tgz file that was created
+    let mut entries = match fs::read_dir(&temp_dir).await {
+        Ok(e) => e,
+        Err(err) => {
+            error!("Failed to read temp directory: {}", err);
+            let _ = fs::remove_dir_all(&temp_dir).await;
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read chart files").into_response();
+        }
+    };
+
+    let mut chart_file = None;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if let Ok(path) = entry.path().canonicalize() {
+            if path.extension().map_or(false, |ext| ext == "tgz") {
+                chart_file = Some(path);
+                break;
+            }
+        }
+    }
+
+    let Some(chart_path) = chart_file else {
+        error!("No .tgz file found after helm pull");
+        let _ = fs::remove_dir_all(&temp_dir).await;
+        return (StatusCode::INTERNAL_SERVER_ERROR, "No chart file generated").into_response();
+    };
+
+    // Get file size for Content-Length header
+    let file_size = match fs::metadata(&chart_path).await {
+        Ok(meta) => meta.len(),
+        Err(e) => {
+            error!("Failed to get file metadata: {}", e);
+            let _ = fs::remove_dir_all(&temp_dir).await;
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to prepare download").into_response();
+        }
+    };
+
+    debug!("Chart size: {} bytes", file_size);
+
+    // Open file for streaming
+    let file = match fs::File::open(&chart_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            error!("Failed to open chart file: {}", e);
+            let _ = fs::remove_dir_all(&temp_dir).await;
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open chart file")
+                .into_response();
+        }
+    };
+
+    // Create a stream from the file reader
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+
+    // Schedule directory deletion after streaming completes
+    let temp_clone = temp_dir.clone();
+    tokio::spawn(async move {
+        for retry in 0..3 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            if fs::remove_dir_all(&temp_clone).await.is_ok() {
+                debug!("Temporary chart directory cleaned up");
+                return;
+            }
+            if retry < 2 {
+                debug!("Retry cleaning temp directory (attempt {})", retry + 1);
+            }
+        }
+        warn!("Failed to clean up temporary directory: {}", temp_clone.display());
+    });
+
+    // Generate filename from reference
+    let chart_name = reference.split('/').last().unwrap_or("chart");
+    let filename = if let Some(ver) = version {
+        format!("{}-{}.tgz", chart_name, ver)
+    } else {
+        format!("{}.tgz", chart_name)
+    };
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/gzip"),
+    );
+    if let Ok(val) = HeaderValue::from_str(&file_size.to_string()) {
+        headers.insert(axum::http::header::CONTENT_LENGTH, val);
+    }
+    if let Ok(val) = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)) {
+        headers.insert(axum::http::header::CONTENT_DISPOSITION, val);
+    }
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store"),
+    );
+
+    info!("Serving chart: {} ({} bytes)", reference, file_size);
+    (StatusCode::OK, headers, body).into_response()
+}
+
 async fn health_check() -> impl IntoResponse {
     debug!("Health check");
     (StatusCode::OK, "OK")
@@ -403,18 +652,34 @@ async fn readiness_check(
     axum::extract::State(state): axum::extract::State<AppState>,
 ) -> impl IntoResponse {
     debug!("Readiness check");
+
+    // Check skopeo
     let mut cmd = Command::new(&state.skopeo_path);
     cmd.arg("--version");
+    let skopeo_ready = match timeout(Duration::from_secs(5), cmd.output()).await {
+        Ok(Ok(output)) if output.status.success() => true,
+        _ => false,
+    };
 
-    match timeout(Duration::from_secs(5), cmd.output()).await {
-        Ok(Ok(output)) if output.status.success() => {
-            info!("Readiness check passed");
-            (StatusCode::OK, "Ready")
-        }
-        _ => {
+    // Check helm
+    let mut cmd = Command::new(&state.helm_path);
+    cmd.arg("version");
+    let helm_ready = match timeout(Duration::from_secs(5), cmd.output()).await {
+        Ok(Ok(output)) if output.status.success() => true,
+        _ => false,
+    };
+
+    if skopeo_ready && helm_ready {
+        info!("Readiness check passed");
+        (StatusCode::OK, "Ready")
+    } else {
+        if !skopeo_ready {
             warn!("Readiness check failed: skopeo not available");
-            (StatusCode::SERVICE_UNAVAILABLE, "skopeo not available")
         }
+        if !helm_ready {
+            warn!("Readiness check failed: helm not available");
+        }
+        (StatusCode::SERVICE_UNAVAILABLE, "Required tools not available")
     }
 }
 
