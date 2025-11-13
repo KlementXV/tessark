@@ -599,17 +599,21 @@ async fn do_pull_chart(
     let stream = ReaderStream::new(file);
     let body = Body::from_stream(stream);
 
-    // Schedule directory deletion after streaming completes
+    // Schedule directory deletion with delay to allow streaming to complete
+    // Increase delay to 30 seconds to accommodate large files and slow networks
     let temp_clone = temp_dir.clone();
     tokio::spawn(async move {
+        // Wait longer to ensure streaming is completely finished
+        tokio::time::sleep(Duration::from_secs(30)).await;
+
         for retry in 0..3 {
-            tokio::time::sleep(Duration::from_millis(500)).await;
             if fs::remove_dir_all(&temp_clone).await.is_ok() {
                 debug!("Temporary chart directory cleaned up");
                 return;
             }
             if retry < 2 {
                 debug!("Retry cleaning temp directory (attempt {})", retry + 1);
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
         }
         warn!("Failed to clean up temporary directory: {}", temp_clone.display());
