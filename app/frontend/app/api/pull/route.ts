@@ -8,6 +8,11 @@ export const dynamic = 'force-dynamic';
 const IMAGE_RE = /^[A-Za-z0-9./:@_\-]+$/; // allow letters, digits, slash, dot, colon, @, underscore, dash
 const BACKEND_URL = process.env.BACKEND_URL || 'http://tessark-backend-service:8080';
 
+// Log backend URL on first import
+if (process.env.NODE_ENV === 'development') {
+  console.log('[API] Backend URL configured as:', BACKEND_URL);
+}
+
 export async function GET(req: NextRequest) {
   const ref = (req.nextUrl.searchParams.get('ref') || '').trim();
   const formatRaw = (req.nextUrl.searchParams.get('format') || 'docker-archive').trim();
@@ -100,6 +105,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch (e) {
+    console.error('Failed to parse JSON body:', e);
     return new Response('Invalid JSON body', { status: 400 });
   }
 
@@ -108,6 +114,8 @@ export async function POST(req: NextRequest) {
   const format = formatRaw === 'oci-archive' ? 'oci-archive' : 'docker-archive';
   const username = (body.username || '').trim();
   const password = (body.password || '').trim();
+
+  console.log('POST /api/pull received:', { ref, format, hasUsername: !!username, hasPassword: !!password });
 
   if (!ref) {
     return new Response('Missing image reference', { status: 400 });
@@ -129,6 +137,8 @@ export async function POST(req: NextRequest) {
 
   const backendUrl = `${BACKEND_URL}/api/pull`;
 
+  console.log('Proxying to backend:', { backendUrl, method: 'POST' });
+
   return new Promise<Response>((resolve) => {
     const parsedUrl = new URL(backendUrl);
     const bodyString = JSON.stringify(backendRequestBody);
@@ -147,14 +157,17 @@ export async function POST(req: NextRequest) {
         timeout: 5 * 60 * 1000, // 5 minutes
       },
       (httpRes) => {
+        console.log('Backend response:', { statusCode: httpRes.statusCode });
         if (httpRes.statusCode !== 200) {
           let errorBody = '';
           httpRes.on('data', (chunk) => {
             errorBody += chunk;
           });
           httpRes.on('end', () => {
+            const errorMsg = errorBody || `Backend returned ${httpRes.statusCode}`;
+            console.error('Backend error:', { statusCode: httpRes.statusCode, body: errorMsg });
             resolve(
-              new Response(errorBody || `Backend error: ${httpRes.statusCode}`, {
+              new Response(errorMsg, {
                 status: httpRes.statusCode || 502,
               })
             );
@@ -203,18 +216,21 @@ export async function POST(req: NextRequest) {
     );
 
     httpReq.on('error', (err) => {
+      console.error('Backend connection error:', { message: err.message, code: (err as any).code });
       resolve(
-        new Response(`Backend communication error: ${err.message}`, {
+        new Response(`Backend connection error: ${err.message}`, {
           status: 502,
         })
       );
     });
 
     httpReq.on('timeout', () => {
+      console.error('Backend request timeout');
       httpReq.destroy();
-      resolve(new Response('Image pull timeout (exceeded 5 minutes)', { status: 504 }));
+      resolve(new Response('Backend request timeout (exceeded 5 minutes)', { status: 504 }));
     });
 
+    console.log('Sending request body to backend...');
     httpReq.write(bodyString);
     httpReq.end();
   });

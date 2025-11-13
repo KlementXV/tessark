@@ -59,12 +59,20 @@ export default function PullClientPage() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        setError(`Erreur: ${errorText || response.statusText}`);
+        const statusCode = response.status;
+        const errorMsg = errorText || `HTTP ${statusCode}`;
+        console.error('Pull failed:', { statusCode, errorMsg, body: requestBody });
+        setError(`Erreur (${statusCode}): ${errorMsg}`);
         return;
       }
 
       // Download the file from the response
       const blob = await response.blob();
+      if (blob.size === 0) {
+        setError('Erreur: Réponse vide du serveur');
+        return;
+      }
+
       const contentDisposition = response.headers.get('Content-Disposition');
       let filename = 'images.tar';
 
