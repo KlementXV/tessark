@@ -132,7 +132,7 @@ export default function HelmChartBrowser() {
             <button
               onClick={fetchCharts}
               disabled={loading}
-              className="sketchy-button bg-white text-excalidraw-slate disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="accent-button accent-button-blue disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {loading ? (
                 <>
@@ -176,11 +176,11 @@ export default function HelmChartBrowser() {
                 const isOpen = expanded.has(name);
                 const visibleVersions = isOpen ? versions : versions.slice(0, 3);
                 return (
-                  <div key={name} className="border-2 border-excalidraw-slate rounded p-5 hover:shadow-sketchy-lg transition">
+                  <div key={name} className="border-2 border-excalidraw-slate rounded p-5 hover:shadow-sketchy-lg transition bg-white">
                     <h3 className="text-xl font-bold text-excalidraw-slate mb-3">{name}</h3>
                     <div className="space-y-2">
                       {visibleVersions.map((v, idx) => (
-                        <div key={idx} className="flex items-center justify-between bg-excalidraw-slate-light p-3 rounded">
+                        <div key={idx} className="flex items-center justify-between bg-excalidraw-blue-light p-3 rounded border border-excalidraw-blue">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
                               <span className="font-semibold text-excalidraw-slate">v{v.version}</span>
@@ -194,7 +194,7 @@ export default function HelmChartBrowser() {
                           </div>
                           <button
                             onClick={() => downloadChart(name, v)}
-                            className="sketchy-button ml-4 bg-white text-excalidraw-slate hover:opacity-80 flex items-center gap-2 whitespace-nowrap"
+                            className="accent-button accent-button-orange ml-4 flex items-center gap-2 whitespace-nowrap"
                           >
                             <Download className="w-4 h-4" />
                             {t('download')}
@@ -207,7 +207,7 @@ export default function HelmChartBrowser() {
                         <button
                           type="button"
                           onClick={() => toggleExpanded(name)}
-                          className="text-sm font-medium text-excalidraw-slate border-b border-excalidraw-slate hover:opacity-70"
+                          className="text-sm font-medium px-3 py-1 rounded accent-button-violet"
                           aria-expanded={isOpen}
                           aria-controls={`versions-${name}`}
                         >

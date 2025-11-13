@@ -173,11 +173,11 @@ export default function PullClientPage() {
               </select>
             </div>
 
-            <div className="border-t-2 border-excalidraw-slate pt-4">
+            <div className="collapsible-section">
               <button
                 type="button"
                 onClick={() => setShowAuth(!showAuth)}
-                className="flex items-center gap-2 text-sm font-medium text-excalidraw-slate hover:opacity-70 transition"
+                className="collapsible-toggle"
               >
                 <Lock className="w-4 h-4" />
                 {t('pull.auth.toggle')}
@@ -185,7 +185,7 @@ export default function PullClientPage() {
               </button>
 
               {showAuth && (
-                <div className="mt-4 space-y-3 bg-excalidraw-slate-light p-4 rounded border-2 border-excalidraw-slate">
+                <div className="collapsible-content accent-section-green border-2">
                   <div>
                     <label className="block mb-2 text-sm font-medium text-excalidraw-slate">{t('pull.auth.username')}</label>
                     <input
@@ -243,7 +243,7 @@ export default function PullClientPage() {
             <button
               type="submit"
               disabled={loading}
-              className="sketchy-button w-full bg-white text-excalidraw-slate disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="accent-button accent-button-green w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
               {loading ? `Téléchargement ${progress.current}/${progress.total}...` : t('download')}

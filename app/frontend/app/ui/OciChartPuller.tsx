@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, AlertCircle, Loader2, Package } from 'lucide-react';
+import { Download, AlertCircle, Loader2, Package, Lock, ChevronDown, ChevronUp } from 'lucide-react';
 import { useI18n } from '../i18n/I18nProvider';
 import Navigation from './Navigation';
 import Footer from './Footer';
@@ -17,6 +17,7 @@ export default function OciChartPuller() {
   const [version, setVersion] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
   const [state, setState] = useState<DownloadState>({ loading: false, error: '' });
 
   const handlePullChart = async () => {
@@ -136,41 +137,54 @@ export default function OciChartPuller() {
               </p>
             </div>
 
-            {/* Authentication Section */}
-            <div className="border-t border-excalidraw-slate pt-4">
-              <h3 className="text-sm font-semibold text-excalidraw-slate mb-3">
+            {/* Authentication Section - Collapsible */}
+            <div className="collapsible-section">
+              <button
+                type="button"
+                onClick={() => setShowAuth(!showAuth)}
+                className="collapsible-toggle"
+              >
+                <Lock className="w-4 h-4" />
                 {t('oci.authentication') || 'Authentication'} ({t('oci.optional') || 'Optional'})
-              </h3>
+                {showAuth ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-excalidraw-slate mb-2">
-                    {t('oci.username') || 'Username'}
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={t('oci.username') || 'Username'}
-                    className="sketchy-input w-full"
-                  />
-                </div>
+              {showAuth && (
+                <div className="collapsible-content accent-section-blue border-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-excalidraw-slate mb-2">
+                        {t('oci.username') || 'Username'}
+                      </label>
+                      <input
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={t('oci.username') || 'Username'}
+                        className="sketchy-input w-full"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-excalidraw-slate mb-2">
-                    {t('oci.password') || 'Password'}
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={t('oci.password') || 'Password'}
-                    className="sketchy-input w-full"
-                  />
+                    <div>
+                      <label className="block text-sm font-semibold text-excalidraw-slate mb-2">
+                        {t('oci.password') || 'Password'}
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={t('oci.password') || 'Password'}
+                        className="sketchy-input w-full"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-excalidraw-slate opacity-70 mt-2">
+                    {t('oci.authNote') || 'Your credentials are sent securely and not stored'}
+                  </p>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Error Message */}
@@ -186,7 +200,7 @@ export default function OciChartPuller() {
               <button
                 onClick={handlePullChart}
                 disabled={state.loading || !reference.trim()}
-                className="sketchy-button bg-white text-excalidraw-slate disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="accent-button accent-button-orange disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {state.loading ? (
                   <>
