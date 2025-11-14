@@ -4,6 +4,7 @@
     "charts": "Charts",
     "pull": "Pull Image",
     "oci": "Pull OCI Chart",
+    "registry": "Registry Explorer",
     "lang": {
       "switch": "Français"
     }
@@ -65,6 +66,26 @@
     "help2": "2. Optionally specify a version tag or leave empty for the latest",
     "help3": "3. If the registry requires authentication, provide your credentials",
     "help4": "4. Click \"Pull Chart\" to download the chart as a .tgz file"
+  },
+  "registry": {
+    "title": "Docker Registry Explorer",
+    "description": "Browse images and tags available in your Docker registry",
+    "registryUrl": "Registry URL",
+    "registryPlaceholder": "docker.io or ghcr.io or your-registry.com",
+    "registryHelp": "Enter the registry domain or full URL (http/https). Examples: docker.io, ghcr.io, myregistry.example.com",
+    "search": "Search Images",
+    "loading": "Loading images...",
+    "errorMissingRegistry": "Please enter a registry URL",
+    "errorFetchFailed": "Error fetching images from registry",
+    "authentication": "Authentication (optional)",
+    "username": "Username",
+    "password": "Password",
+    "filterImages": "Filter Images",
+    "searchPlaceholder": "Search by image name...",
+    "found": "Found",
+    "image": "image(s)",
+    "noTags": "No tags available",
+    "empty": "Enter a registry URL to browse available images"
   },
   "footer": {
     "made": "Made with",

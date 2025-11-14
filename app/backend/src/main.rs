@@ -6,8 +6,9 @@ use axum::{
     routing::get,
     Router,
 };
+use base64::Engine;
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{env, time::Duration};
 use tokio::{fs, process::Command, time::timeout};
 use tokio_util::io::ReaderStream;
@@ -47,6 +48,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/fetchIndex", get(fetch_index))
         .route("/api/pull", get(pull_image).post(pull_image_post))
         .route("/api/pullChart", get(pull_chart).post(pull_chart_post))
+        .route("/api/registryList", get(registry_list))
+        .route("/api/registryTags", get(registry_tags))
         .route("/health", get(health_check))
         .route("/ready", get(readiness_check))
         .with_state(state);
@@ -224,6 +227,42 @@ fn parse_repo_tag(reference: &str) -> (String, String) {
         let repo = after_registry.split('/').last().unwrap_or("image").to_string();
         (repo, "latest".into())
     }
+}
+
+#[derive(Serialize)]
+struct RegistryListResponse {
+    repositories: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct RegistryTagsResponse {
+    name: String,
+    tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RegistryTagsTagsResponse {
+    name: String,
+    tags: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct RegistryListParams {
+    registry: String,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RegistryTagsParams {
+    registry: String,
+    image: String,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 // GET endpoint (backwards compatible, credentials in query params - less secure)
@@ -645,6 +684,174 @@ async fn do_pull_chart(
 
     info!("Serving chart: {} ({} bytes)", reference, file_size);
     (StatusCode::OK, headers, body).into_response()
+}
+
+async fn registry_list(
+    axum::extract::State(_state): axum::extract::State<AppState>,
+    Query(params): Query<RegistryListParams>,
+) -> impl IntoResponse {
+    debug!("Registry list request: registry={}", params.registry);
+
+    // Validate registry URL
+    if params.registry.trim().is_empty() {
+        warn!("Empty registry URL");
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing registry URL"}))).into_response();
+    }
+
+    // Build the registry URL
+    let registry_url = if params.registry.starts_with("http://") || params.registry.starts_with("https://") {
+        params.registry.clone()
+    } else {
+        format!("https://{}", params.registry)
+    };
+
+    // Build the catalog URL
+    let catalog_url = format!("{}/v2/_catalog", registry_url);
+    debug!("Fetching catalog from: {}", catalog_url);
+
+    // Build request with optional auth
+    let mut request = reqwest::Client::new().get(&catalog_url);
+
+    if let (Some(username), Some(password)) = (&params.username, &params.password) {
+        if !username.trim().is_empty() && !password.trim().is_empty() {
+            let auth = base64::engine::general_purpose::STANDARD
+                .encode(format!("{}:{}", username.trim(), password.trim()));
+            request = request.header("Authorization", format!("Basic {}", auth));
+            debug!("Authentication enabled for registry");
+        }
+    }
+
+    let fetch_future = request.send();
+    let response = match timeout(Duration::from_secs(30), fetch_future).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            error!("Failed to fetch catalog: {}", e);
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to connect to registry"}))).into_response();
+        }
+        Err(_) => {
+            error!("Timeout fetching catalog");
+            return (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({"error": "Registry request timeout"}))).into_response();
+        }
+    };
+
+    if !response.status().is_success() {
+        warn!("Registry returned error: {}", response.status());
+        let msg = match response.status().as_u16() {
+            401 => "Unauthorized - please check your credentials",
+            403 => "Forbidden - you don't have access to this registry",
+            404 => "Registry not found",
+            _ => "Registry returned an error",
+        };
+        return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": msg}))).into_response();
+    }
+
+    match response.text().await {
+        Ok(text) => {
+            match serde_json::from_str::<RegistryTagsTagsResponse>(&text) {
+                Ok(data) => {
+                    let repos = data.tags.unwrap_or_default();
+                    debug!("Found {} repositories", repos.len());
+                    (StatusCode::OK, Json(RegistryListResponse { repositories: repos })).into_response()
+                }
+                Err(e) => {
+                    error!("Failed to parse registry response: {}", e);
+                    (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Invalid registry response"}))).into_response()
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to read response text: {}", e);
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to read response"}))).into_response()
+        }
+    }
+}
+
+async fn registry_tags(
+    axum::extract::State(_state): axum::extract::State<AppState>,
+    Query(params): Query<RegistryTagsParams>,
+) -> impl IntoResponse {
+    debug!("Registry tags request: registry={}, image={}", params.registry, params.image);
+
+    // Validate inputs
+    if params.registry.trim().is_empty() {
+        warn!("Empty registry URL");
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing registry URL"}))).into_response();
+    }
+
+    if params.image.trim().is_empty() {
+        warn!("Empty image name");
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing image name"}))).into_response();
+    }
+
+    // Build the registry URL
+    let registry_url = if params.registry.starts_with("http://") || params.registry.starts_with("https://") {
+        params.registry.clone()
+    } else {
+        format!("https://{}", params.registry)
+    };
+
+    // Build the tags URL
+    let tags_url = format!("{}/v2/{}/tags/list", registry_url, params.image);
+    debug!("Fetching tags from: {}", tags_url);
+
+    // Build request with optional auth
+    let mut request = reqwest::Client::new().get(&tags_url);
+
+    if let (Some(username), Some(password)) = (&params.username, &params.password) {
+        if !username.trim().is_empty() && !password.trim().is_empty() {
+            let auth = base64::engine::general_purpose::STANDARD
+                .encode(format!("{}:{}", username.trim(), password.trim()));
+            request = request.header("Authorization", format!("Basic {}", auth));
+            debug!("Authentication enabled for registry");
+        }
+    }
+
+    let fetch_future = request.send();
+    let response = match timeout(Duration::from_secs(30), fetch_future).await {
+        Ok(Ok(resp)) => resp,
+        Ok(Err(e)) => {
+            error!("Failed to fetch tags: {}", e);
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to connect to registry"}))).into_response();
+        }
+        Err(_) => {
+            error!("Timeout fetching tags");
+            return (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({"error": "Registry request timeout"}))).into_response();
+        }
+    };
+
+    if !response.status().is_success() {
+        warn!("Registry returned error: {}", response.status());
+        let msg = match response.status().as_u16() {
+            401 => "Unauthorized - please check your credentials",
+            403 => "Forbidden - you don't have access to this image",
+            404 => "Image not found in registry",
+            _ => "Registry returned an error",
+        };
+        return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": msg}))).into_response();
+    }
+
+    match response.text().await {
+        Ok(text) => {
+            match serde_json::from_str::<RegistryTagsTagsResponse>(&text) {
+                Ok(data) => {
+                    let tags = data.tags.unwrap_or_default();
+                    debug!("Found {} tags for image {}", tags.len(), params.image);
+                    (StatusCode::OK, Json(RegistryTagsResponse {
+                        name: params.image,
+                        tags,
+                    })).into_response()
+                }
+                Err(e) => {
+                    error!("Failed to parse registry response: {}", e);
+                    (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Invalid registry response"}))).into_response()
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to read response text: {}", e);
+            (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to read response"}))).into_response()
+        }
+    }
 }
 
 async fn health_check() -> impl IntoResponse {

@@ -4,6 +4,7 @@
     "charts": "Charts",
     "pull": "Télécharger image",
     "oci": "Télécharger Chart OCI",
+    "registry": "Explorateur de Registre",
     "lang": {
       "switch": "Anglais"
     }
@@ -65,6 +66,26 @@
     "help2": "2. Spécifiez optionnellement une version ou laissez vide pour la plus récente",
     "help3": "3. Si le registre demande une authentification, fournissez vos identifiants",
     "help4": "4. Cliquez sur \"Télécharger le Chart\" pour télécharger le chart en tant que fichier .tgz"
+  },
+  "registry": {
+    "title": "Explorateur de Registre Docker",
+    "description": "Parcourez les images et tags disponibles dans votre registre Docker",
+    "registryUrl": "URL du Registre",
+    "registryPlaceholder": "docker.io ou ghcr.io ou votre-registre.com",
+    "registryHelp": "Entrez le domaine du registre ou l'URL complète (http/https). Exemples: docker.io, ghcr.io, monregistre.example.com",
+    "search": "Rechercher les Images",
+    "loading": "Chargement des images...",
+    "errorMissingRegistry": "Veuillez entrer une URL de registre",
+    "errorFetchFailed": "Erreur lors de la récupération des images du registre",
+    "authentication": "Authentification (optionnel)",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "filterImages": "Filtrer les Images",
+    "searchPlaceholder": "Rechercher par nom d'image...",
+    "found": "Trouvé",
+    "image": "image(s)",
+    "noTags": "Aucun tag disponible",
+    "empty": "Entrez une URL de registre pour parcourir les images disponibles"
   },
   "footer": {
     "made": "Made with",
