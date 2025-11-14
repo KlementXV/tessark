@@ -10,7 +10,8 @@ export default function Navigation() {
 
   const isPull = pathname?.startsWith(`/${locale}/pull`) ?? false;
   const isOci = pathname?.startsWith(`/${locale}/oci`) ?? false;
-  const isCharts = !isPull && !isOci;
+  const isRegistry = pathname?.startsWith(`/${locale}/registry`) ?? false;
+  const isCharts = !isPull && !isOci && !isRegistry;
 
   const frPath = (() => {
     if (!pathname) return '/fr/';
@@ -61,6 +62,15 @@ export default function Navigation() {
               aria-current={isOci ? 'page' : undefined}
             >
               {t('nav.oci')}
+            </a>
+            <a
+              href={`/${locale}/registry`}
+              className={`text-excalidraw-slate hover:opacity-70 transition font-medium ${
+                isRegistry ? 'font-bold border-b-2 border-excalidraw-slate' : 'opacity-75'
+              }`}
+              aria-current={isRegistry ? 'page' : undefined}
+            >
+              {t('nav.registry')}
             </a>
             <div className="flex items-center gap-2 ml-2">
               <a
