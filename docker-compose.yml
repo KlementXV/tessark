@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    container_name: tessark-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=debug
+      - PORT=8080
+      - SKOPEO_PATH=/usr/bin/skopeo
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tessark-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  frontend:
+    build:
+      context: ./app/frontend
+      dockerfile: Dockerfile
+    container_name: tessark-frontend
+    ports:
+      - "3000:8080"
+    environment:
+      - NODE_ENV=production
+      - API_BASE=http://backend:8080
+      - PORT=8080
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - tessark-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  tessark-network:
+    driver: bridge
