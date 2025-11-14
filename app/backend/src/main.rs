@@ -24,23 +24,31 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
+    // Initialize tracing with better defaults for Docker
+    let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&rust_log))
         )
+        .with_writer(std::io::stdout)
+        .with_thread_ids(true)
+        .with_target(true)
         .init();
 
-    info!("Starting tessark backend service");
+    info!("═══════════════════════════════════════════════════════════════");
+    info!("   Starting Tessark Backend Service");
+    info!("═══════════════════════════════════════════════════════════════");
+
     let skopeo_path = env::var("SKOPEO_PATH").unwrap_or_else(|_| "skopeo".to_string());
     info!("Skopeo path: {}", skopeo_path);
     let helm_path = env::var("HELM_PATH").unwrap_or_else(|_| "helm".to_string());
     info!("Helm path: {}", helm_path);
+
     let client = reqwest::Client::builder()
         .user_agent("tessark-backend/0.1")
         .build()?;
-    info!("HTTP client created");
+    info!("HTTP client initialized");
 
     let state = AppState { skopeo_path, helm_path, client };
 
@@ -57,11 +65,15 @@ async fn main() -> anyhow::Result<()> {
     let port = env::var("PORT")
         .unwrap_or_else(|_| "8080".into())
         .parse::<u16>()?;
-    info!("Parsed port: {}", port);
+    info!("Server port: {}", port);
+
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-    info!("Binding to {}", addr);
+    info!("Binding to: {}", addr);
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("Server listening on http://{}", addr);
+    info!("✓ Server listening on http://{}", addr);
+    info!("═══════════════════════════════════════════════════════════════");
+
     axum::serve(listener, app).await?;
     info!("Server stopped");
     Ok(())
@@ -690,11 +702,11 @@ async fn registry_list(
     axum::extract::State(_state): axum::extract::State<AppState>,
     Query(params): Query<RegistryListParams>,
 ) -> impl IntoResponse {
-    debug!("Registry list request: registry={}", params.registry);
+    info!("→ Registry list request: registry={}", params.registry);
 
     // Validate registry URL
     if params.registry.trim().is_empty() {
-        warn!("Empty registry URL");
+        warn!("  ✗ Empty registry URL");
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing registry URL"}))).into_response();
     }
 
@@ -735,7 +747,7 @@ async fn registry_list(
     };
 
     if !response.status().is_success() {
-        warn!("Registry returned error: {}", response.status());
+        error!("  ✗ Registry returned error: {}", response.status());
         let msg = match response.status().as_u16() {
             401 => "Unauthorized - please check your credentials",
             403 => "Forbidden - you don't have access to this registry",
@@ -750,17 +762,17 @@ async fn registry_list(
             match serde_json::from_str::<RegistryTagsTagsResponse>(&text) {
                 Ok(data) => {
                     let repos = data.tags.unwrap_or_default();
-                    debug!("Found {} repositories", repos.len());
+                    info!("  ✓ Found {} repositories", repos.len());
                     (StatusCode::OK, Json(RegistryListResponse { repositories: repos })).into_response()
                 }
                 Err(e) => {
-                    error!("Failed to parse registry response: {}", e);
+                    error!("  ✗ Failed to parse registry response: {} (Response: {})", e, text);
                     (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Invalid registry response"}))).into_response()
                 }
             }
         }
         Err(e) => {
-            error!("Failed to read response text: {}", e);
+            error!("  ✗ Failed to read response text: {}", e);
             (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to read response"}))).into_response()
         }
     }
@@ -770,16 +782,16 @@ async fn registry_tags(
     axum::extract::State(_state): axum::extract::State<AppState>,
     Query(params): Query<RegistryTagsParams>,
 ) -> impl IntoResponse {
-    debug!("Registry tags request: registry={}, image={}", params.registry, params.image);
+    info!("→ Registry tags request: registry={}, image={}", params.registry, params.image);
 
     // Validate inputs
     if params.registry.trim().is_empty() {
-        warn!("Empty registry URL");
+        warn!("  ✗ Empty registry URL");
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing registry URL"}))).into_response();
     }
 
     if params.image.trim().is_empty() {
-        warn!("Empty image name");
+        warn!("  ✗ Empty image name");
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Missing image name"}))).into_response();
     }
 
@@ -820,7 +832,7 @@ async fn registry_tags(
     };
 
     if !response.status().is_success() {
-        warn!("Registry returned error: {}", response.status());
+        error!("  ✗ Registry returned error: {}", response.status());
         let msg = match response.status().as_u16() {
             401 => "Unauthorized - please check your credentials",
             403 => "Forbidden - you don't have access to this image",
@@ -835,20 +847,20 @@ async fn registry_tags(
             match serde_json::from_str::<RegistryTagsTagsResponse>(&text) {
                 Ok(data) => {
                     let tags = data.tags.unwrap_or_default();
-                    debug!("Found {} tags for image {}", tags.len(), params.image);
+                    info!("  ✓ Found {} tags for image {}", tags.len(), params.image);
                     (StatusCode::OK, Json(RegistryTagsResponse {
                         name: params.image,
                         tags,
                     })).into_response()
                 }
                 Err(e) => {
-                    error!("Failed to parse registry response: {}", e);
+                    error!("  ✗ Failed to parse registry response: {} (Response: {})", e, text);
                     (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Invalid registry response"}))).into_response()
                 }
             }
         }
         Err(e) => {
-            error!("Failed to read response text: {}", e);
+            error!("  ✗ Failed to read response text: {}", e);
             (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": "Failed to read response"}))).into_response()
         }
     }
