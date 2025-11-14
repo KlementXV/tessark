@@ -29,6 +29,7 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     skopeo \
+    helm \
     ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
