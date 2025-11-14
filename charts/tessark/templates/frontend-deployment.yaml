@@ -23,10 +23,10 @@ spec:
         - containerPort: {{ .Values.frontend.service.targetPort }}
           name: http
         env:
-        - name: PORT
-          value: {{ .Values.frontend.env.PORT | quote }}
-        - name: NEXT_PUBLIC_API_URL
-          value: "http://{{ .Values.backend.name }}-service:{{ .Values.backend.service.port }}"
+        {{- range $key, $value := .Values.frontend.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
         resources:
           requests:
             memory: {{ .Values.frontend.resources.requests.memory }}

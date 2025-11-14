@@ -50,6 +50,10 @@ frontend:
       cpu: "500m"
   env:
     PORT: "8080"
+    API_BASE: "http://tessark-backend-service:8080"
+    # Backend API base URL - used for runtime API proxy
+    # Format: http://service-name:port (inside Kubernetes cluster)
+    # Default assumes backend service is named tessark-backend-service
 
 ingress:
   enabled: true
