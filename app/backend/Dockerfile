@@ -29,9 +29,14 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     skopeo \
-    helm \
+    curl \
     ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /tmp/helm && \
+    curl -fsSL https://get.helm.sh/helm-v3.14.2-linux-amd64.tar.gz | tar -xz -C /tmp/helm && \
+    mv /tmp/helm/linux-amd64/helm /usr/local/bin/helm && \
+    chmod +x /usr/local/bin/helm && \
+    rm -rf /tmp/helm
 
 # Utilisateur non-root système (sans shell)
 RUN useradd -r -u ${APP_UID} -g users -d /nonexistent -s /usr/sbin/nologin helmer
