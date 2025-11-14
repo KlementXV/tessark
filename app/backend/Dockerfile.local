@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     skopeo \
-    curl \
+    helm \
     ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /tmp/helm && \
